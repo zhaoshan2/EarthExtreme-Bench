@@ -1,17 +1,11 @@
-"""
-Filter disasters
-1. Disaster group: Natural
-2. Disaster subgroup: Hydrological, Meteorological, Climatological
-3. Disaster Type: compute their temporal duration
-"""
-import numpy as np
-import xarray as xr
-import csv
 import json
 import pandas as pd
-import os
 from pathlib import Path
-import argparse
+"""
+Look up table between country and longitude, latitude extend
+Data source: https://latitudelongitude.org/
+(Some extents are larger than the recorded cities' extent.)
+"""
 # CURR_FOLDER_PATH = Path(__file__).parent
 DATA_FOLDER_PATH = Path(__file__).parent.parent.parent.parent / "E:/datasets/disasters"
 INPUT_CSV_PATH = DATA_FOLDER_PATH / "output/tropicalCyclone2019.csv"

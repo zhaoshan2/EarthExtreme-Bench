@@ -17,9 +17,7 @@ def create_gif(root, image_list, gif_name, duration=0.1):
     return
 
 def main():
-    PATH = 'E:/surface'
-    HEATWAVE_PATH = 'E:\datasets\disasters\output'
-    OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'res/coldwaves' / '2019-0655-BGD'
+    OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'res/heatwave' / '2019-0650-GBR' / 'PNG'
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):

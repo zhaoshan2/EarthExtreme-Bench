@@ -6,6 +6,7 @@ import xarray as xr
 import pandas as pd
 import os
 from pathlib import Path
+import seaborn as sns
 import argparse
 from datetime import datetime, timedelta
 import imageio
@@ -17,21 +18,23 @@ def create_gif(root, image_list, gif_name, duration=0.1):
     return
 
 def main():
-    OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'res/heatwave' / '2019-0650-GBR' / 'PNG'
+    OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'res/tropicalCyclone' / 'TC_2019210N16117' / 'PNG'
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):
         filename = os.fsdecode(file)
         if filename.endswith(".png"):
-            filenamelist.append(filename)
-    create_gif(OUTPUT_DATA_DIR, filenamelist, os.path.join(OUTPUT_DATA_DIR, 'animation.gif'))
+            if '_msl_' in filename:
+                filenamelist.append(filename)
+    filenamelist = sorted(filenamelist, key=lambda x: int(x[29:-4]))
+    print(filenamelist)
+    create_gif(OUTPUT_DATA_DIR, filenamelist, os.path.join(OUTPUT_DATA_DIR, 'animation_msl.gif'))
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--engine', default="cfgrib")
-    # if grib file, engine=cfgrib
-    args = parser.parse_args()
-    main()
+
+    # sns.scatterplot(data=file, x="LON", y="LAT", hue="ISO_TIME",legend=False)
+
+    # main()
 
     """
     installation error 

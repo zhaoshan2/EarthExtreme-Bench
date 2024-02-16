@@ -41,6 +41,6 @@ if __name__ == "__main__":
         disaster.min_lat[disaster.Country == country] = position[2]
         disaster.max_lat[disaster.Country == country] = position[3]
 
-    disaster.to_csv(OUTPUT_CSV_PATH)
+    disaster.to_csv(OUTPUT_CSV_PATH, index=False)
 
 

@@ -8,42 +8,8 @@ import os
 from pathlib import Path
 import argparse
 from datetime import datetime, timedelta
+import utils
 
-def latlon2xy(lat:xr.DataArray, lon:xr.DataArray) -> tuple[np.array, np.array]:
-     """
-     Latitude, longitude to pixel index
-     """
-     x = (90 - lat.values.astype(np.float32)) * 4
-     y = (lon.values.astype(np.float32)) * 4
-     return x, y
-def crop_mask(mask: np.array, lat: xr.DataArray , lon:xr.DataArray) -> np.array:
-    x, y = latlon2xy(lat, lon)
-    mask_cropped = mask[int(np.min(x)):int(np.max(x)), int(np.min(y)):int(np.max(y))]
-    return mask_cropped.astype(np.float32)
-def west2numbers(min_lon, max_lon):
-    if max_lon <= 0:
-        return min(360+min_lon, 359.75), min(360+max_lon, 359.75)
-    else:
-        return min_lon, max_lon
-def months_within_date_range(start_date, end_date):
-    """
-    Returns a list of months within the given date range.
-    """
-    months_list = []
-    current_date = start_date
-
-    while current_date <= end_date:
-        months_list.append(current_date.strftime('%Y%m'))
-        # Move to the next month
-        month = current_date.month
-        year = current_date.year
-        if month == 12:
-            month = 1
-            year += 1
-        else:
-            month += 1
-        current_date = datetime(year, month, 1)
-    return list(months_list)
 def main():
     DISASTER_PATH = Path('E:/datasets/disasters')
     CSV_PATH = DISASTER_PATH / 'output'
@@ -54,8 +20,6 @@ def main():
     VARIABLE = 't2m'
 
     extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019_pos.csv'))
-    # Sample dataset, only study disaster in 2019
-    extremeTemperature = extremeTemperature[extremeTemperature['Start Year'] >= 2019]
 
     # Load constant masks
     soil_type = np.load(os.path.join(MASK_PATH, 'soil_type.npy')).astype(np.float32) #(721,1440)
@@ -65,7 +29,7 @@ def main():
     for i in range(extremeTemperature.shape[0]):
     # for i in range(1):
         # ith disaster
-        record = extremeTemperature.iloc[i]
+        record = extremeTemperature.iloc[i] # iloc: ith row in the new array, loc: index i (old array)
         start_year = str(int(record['Start Year']))
         start_month = str(int(record['Start Month']))
         # Fill missing values in 'Day'
@@ -83,7 +47,7 @@ def main():
 
         ## Temporal Processing
         # disasterDuration = (end_time_object - start_time_object).days
-        disasterDuration = months_within_date_range(start_time_object, end_time_object)
+        disasterDuration = utils.months_within_date_range(start_time_object, end_time_object)
         print(disasterDuration)
 
         # If the disaster spanned within 2 months
@@ -93,7 +57,7 @@ def main():
                 dataset_month = xr.open_dataset(os.path.join(DATA_PATH, f'surface_{disasterMonth}.nc'))
                 t2m_month = dataset_month[VARIABLE]
                 dataset_list.append(t2m_month)
-                t2m = xr.concat(dataset_list, dim='time')
+            t2m = xr.concat(dataset_list, dim='time')
         # if disasterDuration == 0:
         #     dataset = xr.open_dataset(os.path.join(DATA_PATH, f'surface_{start_time_str}.nc'))
         #     t2m = dataset[VARIABLE]
@@ -128,17 +92,17 @@ def main():
             part1_aoi_longitude = part1["longitude"][:]
             aoi_latitude = part1["latitude"][:]
 
-            part1_land_mask = crop_mask(land_mask, aoi_latitude, part1_aoi_longitude)
-            part1_topography = crop_mask(topography, aoi_latitude, part1_aoi_longitude)
-            part1_soil_type = crop_mask(soil_type, aoi_latitude, part1_aoi_longitude)
+            part1_land_mask = utils.crop_mask(land_mask, aoi_latitude, part1_aoi_longitude)
+            part1_topography = utils.crop_mask(topography, aoi_latitude, part1_aoi_longitude)
+            part1_soil_type = utils.crop_mask(soil_type, aoi_latitude, part1_aoi_longitude)
 
             # Eastern part
             part2 = t2m.sel(longitude=slice(0, lon1), latitude=slice(lat0, lat1))
             part2_aoi_longitude = part2["longitude"][:]
 
-            part2_land_mask = crop_mask(land_mask, aoi_latitude, part2_aoi_longitude)
-            part2_topography = crop_mask(topography, aoi_latitude, part2_aoi_longitude)
-            part2_soil_type = crop_mask(soil_type, aoi_latitude, part2_aoi_longitude)
+            part2_land_mask = utils.crop_mask(land_mask, aoi_latitude, part2_aoi_longitude)
+            part2_topography = utils.crop_mask(topography, aoi_latitude, part2_aoi_longitude)
+            part2_soil_type = utils.crop_mask(soil_type, aoi_latitude, part2_aoi_longitude)
 
             # Merge two parts of t2m
             t2m = xr.concat([part1, part2], dim='longitude')
@@ -148,7 +112,7 @@ def main():
             soil_type_cropped = np.concatenate((part1_soil_type, part2_soil_type), axis=1)
         # If within Western part or within Eastern part
         else:
-            lon0, lon1 = west2numbers(lon0, lon1)
+            lon0, lon1 = utils.west2numbers(lon0, lon1)
             region = {'longitude': slice(lon0, lon1), 'latitude': slice(lat0, lat1)}
             # Select the affected area
             t2m = t2m.sel(**region)
@@ -157,9 +121,9 @@ def main():
             aoi_longitude = t2m["longitude"][:]
             aoi_latitude = t2m["latitude"][:]
             # Crop masks for AOI
-            land_mask_cropped = crop_mask(land_mask, aoi_latitude, aoi_longitude)
-            topography_cropped = crop_mask(topography, aoi_latitude, aoi_longitude)
-            soil_type_cropped = crop_mask(soil_type, aoi_latitude, aoi_longitude)
+            land_mask_cropped = utils.crop_mask(land_mask, aoi_latitude, aoi_longitude)
+            topography_cropped = utils.crop_mask(topography, aoi_latitude, aoi_longitude)
+            soil_type_cropped = utils.crop_mask(soil_type, aoi_latitude, aoi_longitude)
 
         # Identifier of the disaster event
         disno = record['DisNo.']

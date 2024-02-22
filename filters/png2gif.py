@@ -18,23 +18,31 @@ def create_gif(root, image_list, gif_name, duration=0.1):
     return
 
 def main():
-    OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'res/tropicalCyclone' / 'TC_2019210N16117' / 'PNG'
+    DISASTER = 'coldwave'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}' / '2022-0800-MNG' / 'PNG'
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):
         filename = os.fsdecode(file)
         if filename.endswith(".png"):
-            if '_msl_' in filename:
+            if DISASTER == "tropicalCyclone":
+                if '_msl_' in filename:
+                    filenamelist.append(filename)
+            else:
                 filenamelist.append(filename)
-    filenamelist = sorted(filenamelist, key=lambda x: int(x[29:-4]))
+    if DISASTER == "tropicalCyclone":
+        filenamelist = sorted(filenamelist, key=lambda x: int(x[29:-4]))
+    else:
+        filenamelist = sorted(filenamelist, key=lambda x: int(x[18:-4]))
     print(filenamelist)
-    create_gif(OUTPUT_DATA_DIR, filenamelist, os.path.join(OUTPUT_DATA_DIR, 'animation_msl.gif'))
+    create_gif(OUTPUT_DATA_DIR, filenamelist, os.path.join(OUTPUT_DATA_DIR, 'animation_t2m.gif'))
 
 if __name__ == "__main__":
 
     # sns.scatterplot(data=file, x="LON", y="LAT", hue="ISO_TIME",legend=False)
 
-    # main()
+    main()
 
     """
     installation error 

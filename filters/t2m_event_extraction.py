@@ -11,15 +11,16 @@ from datetime import datetime, timedelta
 import utils
 
 def main():
-    DISASTER_PATH = Path('E:/datasets/disasters')
-    CSV_PATH = DISASTER_PATH / 'output'
-    DATA_PATH = DISASTER_PATH / 'surface'
-    MASK_PATH = DATA_PATH / 'masks'
-    DISASTER = "heatwave" #heatwave, coldwave
-    OUTPUT_DATA_DIR = Path(__file__).parent.parent / f'res/{DISASTER}'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    DISASTER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home' / 'data' / 'disaster'
+    CSV_PATH = DISASTER_PATH / 'output_csv'
+    DATA_PATH = DISASTER_PATH.parent / 'pangu' / 'surface'
+    MASK_PATH = DISASTER_PATH / 'masks'
+    DISASTER = "coldwave" #heatwave, coldwave
+
     VARIABLE = 't2m'
 
-    extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019_pos.csv'))
+    extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019to2022_pos.csv'))
 
     # Load constant masks
     soil_type = np.load(os.path.join(MASK_PATH, 'soil_type.npy')).astype(np.float32) #(721,1440)
@@ -29,6 +30,7 @@ def main():
     for i in range(extremeTemperature.shape[0]):
     # for i in range(1):
         # ith disaster
+        OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
         record = extremeTemperature.iloc[i] # iloc: ith row in the new array, loc: index i (old array)
         start_year = str(int(record['Start Year']))
         start_month = str(int(record['Start Month']))
@@ -120,6 +122,7 @@ def main():
             # Longitudinal and latitudinal extent of AOI
             aoi_longitude = t2m["longitude"][:]
             aoi_latitude = t2m["latitude"][:]
+
             # Crop masks for AOI
             land_mask_cropped = utils.crop_mask(land_mask, aoi_latitude, aoi_longitude)
             topography_cropped = utils.crop_mask(topography, aoi_latitude, aoi_longitude)
@@ -127,19 +130,19 @@ def main():
 
         # Identifier of the disaster event
         disno = record['DisNo.']
-        OUTPUT_DATA_DIR = OUTPUT_DATA_DIR/disno
+        OUTPUT_DATA_DIR = OUTPUT_DATA_DIR / disno
         if not os.path.exists(OUTPUT_DATA_DIR):
             os.mkdir(OUTPUT_DATA_DIR)
         # Plot cropped masks
-        plt.figure()
-        plt.imshow(land_mask_cropped)
-        plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'land_{disno}.png'))
-        plt.figure()
-        plt.imshow(topography_cropped)
-        plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'topography_{disno}.png'))
-        plt.figure()
-        plt.imshow(soil_type_cropped)
-        plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'soil_type_{disno}.png'))
+        # plt.figure()
+        # plt.imshow(land_mask_cropped)
+        # plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'land_{disno}.png'))
+        # plt.figure()
+        # plt.imshow(topography_cropped)
+        # plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'topography_{disno}.png'))
+        # plt.figure()
+        # plt.imshow(soil_type_cropped)
+        # plt.savefig(os.path.join(OUTPUT_DATA_DIR, f'soil_type_{disno}.png'))
 
         ## Save disaster data to nc file
         t2m.to_netcdf(os.path.join(OUTPUT_DATA_DIR, f'{disno}.nc'))

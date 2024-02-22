@@ -12,18 +12,14 @@ import datetime
 
 # Each image is normalzied for better visualization
 def main():
-    DATA_PATH = Path('E:/surface')
-    DISASTER = 'tropicalCyclone'
-    OUTPUT_DATA_DIR = Path(__file__).parent.parent / f'res/{DISASTER}'
-
-
-
+    DISASTER = 'coldwave'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
     for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
         for subdir in subdirs:
             for file in os.listdir(os.path.join(root, subdir)):
                 filename = os.fsdecode(file)
                 if filename.endswith(".nc"):
-
                     if DISASTER == 'tropicalCyclone':
                         dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-11], filename)) # multi vars
                     else:
@@ -31,11 +27,12 @@ def main():
                     for var in dataset.data_vars:
                         data = dataset[var].values.astype(np.float32)
                         times = dataset.time
-                        # print(filename, "{:.2f}".format(np.min(t2m)-273))
+                        min_v = np.percentile(data, 1)
+                        max_v = np.percentile(data, 99)
                         # print(filename, "{:.2f}".format(np.max(t2m) - 273))
                         for i in range(data.shape[0]):
                             plt.figure()
-                            plt.imshow(data[i])
+                            plt.imshow(data[i], vmin=min_v, vmax=max_v)
                             plt.colorbar()
                             title_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d %H:%M')
                             plt.title(f'{var}_{title_time}')
@@ -46,11 +43,54 @@ def main():
                             if not os.path.exists(EVENT_PNG_FOLDER):
                                 os.mkdir(EVENT_PNG_FOLDER)
                             plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-3]}_{var}_{str(i)}.png"))
+def extremeTemperature_attributes():
+    DISASTER = 'heatwave'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    disaster = pd.DataFrame()
 
+    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
+        for subdir in subdirs:
+            for file in os.listdir(os.path.join(root, subdir)):
+                filename = os.fsdecode(file)
+                if filename.endswith(".nc"):
+                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
+                    for var in dataset.data_vars:
+                        data = dataset[var].values.astype(np.float32)
+                        times = dataset.time
+
+                        aoi_longitude = dataset["longitude"][:]
+                        aoi_latitude = dataset["latitude"][:]
+
+                        disaster = pd.concat([disaster, pd.DataFrame([{
+                            'Disno.':filename[:-3],
+                            'disaster_type':DISASTER,
+                            'start':pd.to_datetime(times[0].values).strftime('%Y-%m-%d %H:%M'),
+                            'end':pd.to_datetime(times[-1].values).strftime('%Y-%m-%d %H:%M'),
+                            'num_frames':data.shape[0],
+                            'W':data.shape[1],
+                            'H':data.shape[2],
+                            'spatial_resolution': 0.25,
+                            'spatial_resolution_unit': 'degree',
+                            'temporal_resolution': 1 ,
+                            'temporal_resolution_unit': 'hour',
+                            'min_val':np.min(data),
+                            'max_val':np.max(data),
+                            'min1_val':np.percentile(data, 1),
+                            'max99_val':np.percentile(data, 99),
+                            'mean_val':np.mean(data),
+                            'val_unit':'K',
+                            'min_lon': np.min(aoi_longitude.values.astype(np.float32)),
+                            'max_lon': np.max(aoi_longitude.values.astype(np.float32)),
+                            'min_lat': np.min(aoi_latitude.values.astype(np.float32)),
+                            'max_lat': np.max(aoi_latitude.values.astype(np.float32)),
+                            'variables': var
+                        }])], ignore_index=True)
+    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_records.csv'), index=False)
 
 if __name__ == "__main__":
 
-    main()
+    extremeTemperature_attributes()
 
     """
     installation error 

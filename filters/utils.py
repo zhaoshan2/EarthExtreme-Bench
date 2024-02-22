@@ -1,6 +1,6 @@
 import numpy as np
 import xarray as xr
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def latlon2xy(lat: xr.DataArray, lon: xr.DataArray) -> tuple[np.array, np.array]:
     """
@@ -43,3 +43,18 @@ def months_within_date_range(start_date, end_date):
             month += 1
         current_date = datetime(year, month, 1)
     return list(months_list)
+
+
+def days_within_date_range(start_date, end_date):
+    """
+    Returns a list of days within the given date range.
+    """
+
+    current_date = start_date
+    days_list = []
+
+    while current_date <= end_date:
+        days_list.append(current_date.strftime('%Y%m%d'))
+        current_date += timedelta(days=1)
+
+    return days_list

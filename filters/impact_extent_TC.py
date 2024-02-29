@@ -9,12 +9,12 @@ Look up table between country and longitude, latitude extend
 Data source: https://latitudelongitude.org/
 (Some extents are larger than the recorded cities' extent.)
 """
-# CURR_FOLDER_PATH = Path(__file__).parent
-DATA_FOLDER_PATH = Path(__file__).parent.parent.parent.parent / "E:/datasets/disasters"
-INPUT_POINTS_PATH = DATA_FOLDER_PATH / "output/ibtracs.since1980.list.v04r00.csv"
-INPUT_EVENTS_PATH = DATA_FOLDER_PATH / "output/tropicalCyclone_2019.csv"
-OUTPUT_TC_PATH = DATA_FOLDER_PATH / "output/tropicalCyclone_2019_ibtracs.csv"
-OUTPUT_CSV_PATH = DATA_FOLDER_PATH / "output/tropicalCyclone_2019_ibtracs_emdat.csv"
+CURR_FOLDER_PATH = Path(__file__).parent
+DISASTER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home' / 'data' / 'disaster'
+INPUT_POINTS_PATH = DISASTER_PATH / "input_csv" / "ibtracs.since1980.list.v04r00.csv"
+INPUT_EVENTS_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019.csv"
+OUTPUT_TC_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019_ibtracs.csv"
+OUTPUT_CSV_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019_ibtracs_emdat.csv"
 if __name__ == "__main__":
 
     """
@@ -23,11 +23,11 @@ if __name__ == "__main__":
 
     tropical_events = pd.read_csv(INPUT_EVENTS_PATH,
                                   encoding='unicode_escape')
-
-    """
+    #
+    #
     cyclone_points = pd.read_csv(INPUT_POINTS_PATH, skiprows=[1])
     cyclone_points = cyclone_points[cyclone_points['SEASON']==2019]
-    
+
     tc_sids = cyclone_points.SID.unique()
 
     i = -1
@@ -74,14 +74,13 @@ if __name__ == "__main__":
         empty_df.loc[i, 'max_lat'] = max_lat_impact
 
     empty_df.to_csv(OUTPUT_TC_PATH, index=False)
-    """
 
     
     cyclone_trajectories = pd.read_csv(OUTPUT_TC_PATH)
     # cyclone_trajectories = cyclone_trajectories.astype({'Start Year': 'int'})
     cyclone_trajectories = cyclone_trajectories[cyclone_trajectories['Start Year'] >= 2019] # index keeps the same before and after selection
 
-    print(cyclone_trajectories.index)
+    # print(cyclone_trajectories.index)
     for i in cyclone_trajectories.index:
         cyclone_trajectory = cyclone_trajectories.loc[i]
         event_name = cyclone_trajectory['Event Name'].capitalize() #"Penny"

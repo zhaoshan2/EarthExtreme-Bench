@@ -43,6 +43,34 @@ def main():
                             if not os.path.exists(EVENT_PNG_FOLDER):
                                 os.mkdir(EVENT_PNG_FOLDER)
                             plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-3]}_{var}_{str(i)}.png"))
+def cyclone2Png():
+    DISASTER = 'tropicalCyclone'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
+        for subdir in subdirs:
+            for file in os.listdir(os.path.join(root, subdir)):
+                filename = os.fsdecode(file)
+                # example visualize z variable at last levels
+                if filename.endswith("TC_2019233N15255_upper.nc"):
+                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-9], filename)) # multi vars
+                    for var in dataset.data_vars:
+                        data = dataset[var].values.astype(np.float32)
+                        times = dataset.time
+                        min_v = np.percentile(data[:,-1,...], 1)
+                        max_v = np.percentile(data[:,-1,...], 99)
+                        # print(filename, "{:.2f}".format(np.max(t2m) - 273))
+                        for i in range(25):
+                            plt.figure()
+                            plt.imshow(data[i,-1,:,:], vmin=min_v, vmax=max_v)
+                            plt.colorbar()
+                            title_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d %H:%M')
+                            plt.title(f'{var}_{title_time}')
+                            EVENT_PNG_FOLDER = os.path.join(OUTPUT_DATA_DIR, filename[:-9], 'PNG') # multi-vars
+                            if not os.path.exists(EVENT_PNG_FOLDER):
+                                os.mkdir(EVENT_PNG_FOLDER)
+                            plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-9]}_{var}_{str(i)}.png"))
+
 def extremeTemperature_attributes():
     DISASTER = 'heatwave'
     CURR_FOLDER_PATH = Path(__file__).parent
@@ -88,9 +116,67 @@ def extremeTemperature_attributes():
                         }])], ignore_index=True)
     disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_records.csv'), index=False)
 
+def cyclone_attributes():
+    DISASTER = 'tropicalCyclone'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    disaster = pd.DataFrame()
+    disaster_surface = pd.DataFrame()
+
+    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
+        for subdir in subdirs:
+            for file in os.listdir(os.path.join(root, subdir)):
+                filename = os.fsdecode(file)
+                # meta information about upper variables
+                if filename.endswith("_upper.nc"):
+                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-9], filename)) # single vars
+                    var = list(dataset.data_vars)
+                    var = var[0]
+
+                    data = dataset[var].values.astype(np.float32)
+                    times = dataset.time
+                    disaster = pd.concat([disaster, pd.DataFrame([{
+                        'Disno.':filename[:-9],
+                        'disaster_type':DISASTER,
+                        'start':pd.to_datetime(times[0].values).strftime('%Y-%m-%d %H:%M'),
+                        'end':pd.to_datetime(times[-1].values).strftime('%Y-%m-%d %H:%M'),
+                        'num_frames':data.shape[0],
+                        'W':data.shape[1],
+                        'H':data.shape[2],
+                        'Z':data.shape[3],
+                        'spatial_resolution': 0.25,
+                        'spatial_resolution_unit': 'degree',
+                        'temporal_resolution': 1 ,
+                        'temporal_resolution_unit': 'hour',
+                        'variables': list(dataset.data_vars)
+                    }])], ignore_index=True)
+
+                # meta information about surface variables
+                elif filename.endswith("_surface.nc"):
+                    dataset_surface = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-11], filename)) # single vars
+                    var = list(dataset_surface.data_vars)
+                    var = var[0]
+                    data_surface = dataset_surface[var].values.astype(np.float32)
+                    times = dataset_surface.time
+                    disaster_surface = pd.concat([disaster_surface, pd.DataFrame([{
+                        'Disno.':filename[:-11],
+                        'disaster_type':DISASTER,
+                        'start':pd.to_datetime(times[0].values).strftime('%Y-%m-%d %H:%M'),
+                        'end':pd.to_datetime(times[-1].values).strftime('%Y-%m-%d %H:%M'),
+                        'num_frames':data_surface.shape[0],
+                        'W':data_surface.shape[1],
+                        'H':data_surface.shape[2],
+                        'spatial_resolution': 0.25,
+                        'spatial_resolution_unit': 'degree',
+                        'temporal_resolution': 1 ,
+                        'temporal_resolution_unit': 'hour',
+                        'variables': list(dataset_surface.data_vars)
+                    }])], ignore_index=True)
+    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_upper_records.csv'), index=False)
+    disaster_surface.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_surface_records.csv'), index=False)
 if __name__ == "__main__":
 
-    extremeTemperature_attributes()
+    cyclone2Png()
 
     """
     installation error 

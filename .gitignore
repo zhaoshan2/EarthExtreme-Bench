@@ -162,3 +162,5 @@ cython_debug/
 # To current project
 res/
 data/
+*.png
+__init__.py

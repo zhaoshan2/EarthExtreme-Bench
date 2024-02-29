@@ -7,7 +7,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from tqdm import tqdm
 import zipfile
 
-# from EarthExtremeBench import EE_BENCH_DIRR
+# from earthextremebench import EE_BENCH_DIRR
 
 def decompress_zip_with_progress(zip_file_path, extract_to_folder=None):
     """Decompress a zip file with a progress bar and remove the symlink."""

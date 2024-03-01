@@ -12,37 +12,31 @@ import datetime
 
 # Each image is normalzied for better visualization
 def main():
-    DISASTER = 'coldwave'
+    DISASTER = 'heatwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
     for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
         for subdir in subdirs:
             for file in os.listdir(os.path.join(root, subdir)):
                 filename = os.fsdecode(file)
-                if filename.endswith(".nc"):
-                    if DISASTER == 'tropicalCyclone':
-                        dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-11], filename)) # multi vars
-                    else:
-                        dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
-                    for var in dataset.data_vars:
-                        data = dataset[var].values.astype(np.float32)
-                        times = dataset.time
-                        min_v = np.percentile(data, 1)
-                        max_v = np.percentile(data, 99)
-                        # print(filename, "{:.2f}".format(np.max(t2m) - 273))
-                        for i in range(data.shape[0]):
-                            plt.figure()
-                            plt.imshow(data[i], vmin=min_v, vmax=max_v)
-                            plt.colorbar()
-                            title_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d %H:%M')
-                            plt.title(f'{var}_{title_time}')
-                            if DISASTER == 'tropicalCyclone':
-                                EVENT_PNG_FOLDER = os.path.join(OUTPUT_DATA_DIR, filename[:-11], 'PNG') # multi-vars
-                            else:
-                                EVENT_PNG_FOLDER = os.path.join(OUTPUT_DATA_DIR, filename[:-3], 'PNG') # single var
-                            if not os.path.exists(EVENT_PNG_FOLDER):
-                                os.mkdir(EVENT_PNG_FOLDER)
-                            plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-3]}_{var}_{str(i)}.png"))
+                if filename.endswith("2019-0650-GBR.nc"):
+                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
+                    var = "t2m"
+                    data = dataset[var].values.astype(np.float32)
+                    times = dataset.time
+                    min_v = np.percentile(data, 1)
+                    max_v = np.percentile(data, 99)
+                    # print(filename, "{:.2f}".format(np.max(t2m) - 273))
+                    for i in range(data.shape[0]):
+                        plt.figure()
+                        plt.imshow(data[i], vmin=min_v, vmax=max_v)
+                        plt.colorbar()
+                        title_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d')
+                        plt.title(f'{var}_{title_time}')
+                        EVENT_PNG_FOLDER = os.path.join(OUTPUT_DATA_DIR, filename[:-3], 'PNG') # single var
+                        if not os.path.exists(EVENT_PNG_FOLDER):
+                            os.mkdir(EVENT_PNG_FOLDER)
+                        plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-3]}_{var}_{str(i)}.png"))
 def cyclone2Png():
     DISASTER = 'tropicalCyclone'
     CURR_FOLDER_PATH = Path(__file__).parent
@@ -72,9 +66,9 @@ def cyclone2Png():
                             plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-9]}_{var}_{str(i)}.png"))
 
 def extremeTemperature_attributes():
-    DISASTER = 'heatwave'
+    DISASTER = 'coldwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
     disaster = pd.DataFrame()
 
     for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
@@ -101,20 +95,26 @@ def extremeTemperature_attributes():
                             'spatial_resolution': 0.25,
                             'spatial_resolution_unit': 'degree',
                             'temporal_resolution': 1 ,
-                            'temporal_resolution_unit': 'hour',
+                            'temporal_resolution_unit': 'day',
                             'min_val':np.min(data),
                             'max_val':np.max(data),
                             'min1_val':np.percentile(data, 1),
                             'max99_val':np.percentile(data, 99),
                             'mean_val':np.mean(data),
                             'val_unit':'K',
-                            'min_lon': np.min(aoi_longitude.values.astype(np.float32)),
-                            'max_lon': np.max(aoi_longitude.values.astype(np.float32)),
-                            'min_lat': np.min(aoi_latitude.values.astype(np.float32)),
-                            'max_lat': np.max(aoi_latitude.values.astype(np.float32)),
+                            'min_lon': aoi_longitude.values.astype(np.float32)[0],
+                            'max_lon': aoi_longitude.values.astype(np.float32)[-1],
+                            'min_lat': aoi_latitude.values.astype(np.float32)[-1],
+                            'max_lat': aoi_latitude.values.astype(np.float32)[0],
                             'variables': var
                         }])], ignore_index=True)
-    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_records.csv'), index=False)
+
+    # Convert the 'start' column to datetime
+    disaster['start'] = pd.to_datetime(disaster['start'])
+
+    # Sort the DataFrame by the 'start' column
+    disaster = disaster.sort_values(by='start')
+    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records.csv'), index=False)
 
 def cyclone_attributes():
     DISASTER = 'tropicalCyclone'
@@ -176,7 +176,7 @@ def cyclone_attributes():
     disaster_surface.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_surface_records.csv'), index=False)
 if __name__ == "__main__":
 
-    cyclone2Png()
+    main()
 
     """
     installation error 

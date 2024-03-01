@@ -18,9 +18,9 @@ def create_gif(root, image_list, gif_name, duration=0.1):
     return
 
 def main():
-    DISASTER = 'coldwave'
+    DISASTER = 'heatwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}' / '2022-0800-MNG' / 'PNG'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather'/ f'{DISASTER}-daily' / '2019-0650-GBR' / 'PNG'
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):
@@ -43,7 +43,11 @@ if __name__ == "__main__":
     # sns.scatterplot(data=file, x="LON", y="LAT", hue="ISO_TIME",legend=False)
 
     main()
-
+    # file = "/home/code/EarthExtreme-Bench/data/weather/coldwave-daily/2019-0044-DZA/topography_2019-0044-DZA.npy"
+    # data = np.load(file)
+    # plt.figure()
+    # plt.imshow(data)
+    # plt.savefig("/home/code/EarthExtreme-Bench/data/weather/coldwave-daily/2019-0044-DZA/topography_2019-0044-DZA.png")
     """
     installation error 
     python3.8.8

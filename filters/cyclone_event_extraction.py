@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import argparse
 from datetime import datetime, timedelta
-import utils
+import data_utils
 
 
 def extract_surface():
@@ -45,8 +45,8 @@ def extract_surface():
         end_time_day_object = datetime.strptime(end_year + end_month + end_day, "%Y%m%d")
         end_time_str = end_time_object.strftime('%Y%m')
 
-        disasterDuration = utils.months_within_date_range(start_time_object, end_time_object)
-        disasterDuration_inDays = utils.days_within_date_range(start_time_day_object, end_time_day_object)
+        disasterDuration = data_utils.months_within_date_range(start_time_object, end_time_object)
+        disasterDuration_inDays = data_utils.days_within_date_range(start_time_day_object, end_time_day_object)
         print(disasterDuration)
         # print(disasterDuration_inDays)
 
@@ -77,14 +77,14 @@ def extract_surface():
                     if mask_flag:
                         part1_aoi_longitude = part1["longitude"][:]
                         aoi_latitude = part1["latitude"][:]
-                        part1_land_mask = utils.crop_mask(land_mask, aoi_latitude, part1_aoi_longitude)
-                        part1_topography = utils.crop_mask(topography, aoi_latitude, part1_aoi_longitude)
-                        part1_soil_type = utils.crop_mask(soil_type, aoi_latitude, part1_aoi_longitude)
+                        part1_land_mask = data_utils.crop_mask(land_mask, aoi_latitude, part1_aoi_longitude)
+                        part1_topography = data_utils.crop_mask(topography, aoi_latitude, part1_aoi_longitude)
+                        part1_soil_type = data_utils.crop_mask(soil_type, aoi_latitude, part1_aoi_longitude)
 
                         part2_aoi_longitude = part2["longitude"][:]
-                        part2_land_mask = utils.crop_mask(land_mask, aoi_latitude, part2_aoi_longitude)
-                        part2_topography = utils.crop_mask(topography, aoi_latitude, part2_aoi_longitude)
-                        part2_soil_type = utils.crop_mask(soil_type, aoi_latitude, part2_aoi_longitude)
+                        part2_land_mask = data_utils.crop_mask(land_mask, aoi_latitude, part2_aoi_longitude)
+                        part2_topography = data_utils.crop_mask(topography, aoi_latitude, part2_aoi_longitude)
+                        part2_soil_type = data_utils.crop_mask(soil_type, aoi_latitude, part2_aoi_longitude)
 
                         # Merge two parts of mask
                         land_mask_cropped = np.concatenate((part1_land_mask, part2_land_mask), axis=1)
@@ -93,7 +93,7 @@ def extract_surface():
                         mask_flag = False
                 # If within Western part or within Eastern part
                 else:
-                    lon0, lon1 = utils.west2numbers(lon0, lon1)
+                    lon0, lon1 = data_utils.west2numbers(lon0, lon1)
                     region = {'longitude': slice(lon0, lon1), 'latitude': slice(lat0, lat1)}
                     # Select the affected area
                     surface = surface_month.sel(**region)
@@ -102,9 +102,9 @@ def extract_surface():
                         aoi_longitude = surface["longitude"][:]
                         aoi_latitude = surface["latitude"][:]
                         # Crop masks for AOI
-                        land_mask_cropped = utils.crop_mask(land_mask, aoi_latitude, aoi_longitude)
-                        topography_cropped = utils.crop_mask(topography, aoi_latitude, aoi_longitude)
-                        soil_type_cropped = utils.crop_mask(soil_type, aoi_latitude, aoi_longitude)
+                        land_mask_cropped = data_utils.crop_mask(land_mask, aoi_latitude, aoi_longitude)
+                        topography_cropped = data_utils.crop_mask(topography, aoi_latitude, aoi_longitude)
+                        soil_type_cropped = data_utils.crop_mask(soil_type, aoi_latitude, aoi_longitude)
                         mask_flag = False
 
                 dataset_list.append(surface)
@@ -174,7 +174,7 @@ def extract_upper():
         # end_time_str = end_time_object.strftime('%Y%m')
 
         # disasterDuration = (end_time_object - start_time_object).days
-        disasterDuration = utils.days_within_date_range(start_time_object, end_time_object)
+        disasterDuration = data_utils.days_within_date_range(start_time_object, end_time_object)
         print(disasterDuration)
 
         # Spatial coverage of this disaster (AOI)
@@ -205,7 +205,7 @@ def extract_upper():
 
                 # If within Western part or within Eastern part
                 else:
-                    lon0, lon1 = utils.west2numbers(lon0, lon1)
+                    lon0, lon1 = data_utils.west2numbers(lon0, lon1)
                     region = {'longitude': slice(lon0, lon1), 'latitude': slice(lat0, lat1)}
                     # Select the affected area
                     upper = upper_month.sel(**region)

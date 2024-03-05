@@ -119,7 +119,7 @@ def extremeTemperature_attributes():
 def cyclone_attributes():
     DISASTER = 'tropicalCyclone'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / f'{DISASTER}'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}'
     disaster = pd.DataFrame()
     disaster_surface = pd.DataFrame()
 
@@ -141,9 +141,9 @@ def cyclone_attributes():
                         'start':pd.to_datetime(times[0].values).strftime('%Y-%m-%d %H:%M'),
                         'end':pd.to_datetime(times[-1].values).strftime('%Y-%m-%d %H:%M'),
                         'num_frames':data.shape[0],
-                        'W':data.shape[1],
-                        'H':data.shape[2],
-                        'Z':data.shape[3],
+                        'W':data.shape[2],
+                        'H':data.shape[3],
+                        'Z':data.shape[1],
                         'spatial_resolution': 0.25,
                         'spatial_resolution_unit': 'degree',
                         'temporal_resolution': 1 ,
@@ -172,11 +172,21 @@ def cyclone_attributes():
                         'temporal_resolution_unit': 'hour',
                         'variables': list(dataset_surface.data_vars)
                     }])], ignore_index=True)
+    # Convert the 'start' column to datetime
+    disaster['start'] = pd.to_datetime(disaster['start'])
+
+    # Sort the DataFrame by the 'start' column
+    disaster = disaster.sort_values(by='start')
+    disaster_surface['start'] = pd.to_datetime(disaster_surface['start'])
+
+    # Sort the DataFrame by the 'start' column
+    disaster_surface = disaster_surface.sort_values(by='start')
+
     disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_upper_records.csv'), index=False)
     disaster_surface.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_surface_records.csv'), index=False)
 if __name__ == "__main__":
 
-    main()
+    cyclone_attributes()
 
     """
     installation error 

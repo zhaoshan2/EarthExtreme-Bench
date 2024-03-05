@@ -27,8 +27,8 @@ class Record:
         self.file_path = EXT_PATH / f"{disaster}-daily"
         self.df = pd.read_csv(self.file_path / f'{disaster}-daily_records.csv', encoding='unicode_escape')
         self.disno = self.df['Disno.']
-        self.max_w = size
-        self.max_h = size
+        self.max_w = np.max([size, np.max(self.df.W)])
+        self.max_h = np.max([size, np.max(self.df.H)])
         self.min_w = np.min(self.df.W)
         self.min_h = np.min(self.df.H)
 
@@ -101,9 +101,9 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
         Returns:
             data, labels, field ids, and metadata at that index
         """
-        print(list(self.chip_metadic.keys())[:4])
+        # print(list(self.chip_metadic.keys())[:4])
         key = list(self.chip_metadic.keys())[index]
-        print("length of keys", len(list(self.chip_metadic.keys())))
+        # print("length of keys", len(list(self.chip_metadic.keys())))
         disno = key[:-5]
         frame = int(key[-4:])
         new_chips, _, mask = self.resize_sequence(self.records.file_path, disno, self.records.max_w, self.records.max_h)

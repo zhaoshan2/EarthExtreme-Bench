@@ -343,7 +343,7 @@ def train(model, x , y):
     criterion = nn.L1Loss()
 
     # training epoch
-    epochs = 100
+    epochs = 500
 
     loss_list = []
 
@@ -384,29 +384,22 @@ def train(model, x , y):
 
 if __name__ == '__main__':
     # main()
-
-    checkpoint = torch.load('/home/code/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt',
-                    map_location=device)
+    # To do: problem with imcompetible keys
+    """
+    model = Prithvi(output_dim=1, **model_args)
+    model = model.to(device)
 
     import utils.dataset.era5_extreme_temperature as da
 
     dataset = da.Era5HeatWave(horizon=28, chip_size=224)
     train_idx = 0
-    test_idx = 28
+    test_idx = 183
 
-    model = Prithvi(output_dim=1, **model_args)
-
-    del checkpoint['pos_embed']
-    del checkpoint['decoder_pos_embed']
-    msg = model.load_state_dict(checkpoint, strict=False)
-
-    model = model.to(device)
-    model.float()
-    print(msg)
     x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
 
-    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
-    data = torch.cat([x,mask , x, x,], dim=1)
+    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
+    data = torch.cat([x,mask , x, x,], dim=1)# (1, 6, 224, 224)
+    print("data", data.shape)
 
     data = (data - data_mean) /data_std
     # print(x.shape) # (w,h)
@@ -422,29 +415,97 @@ if __name__ == '__main__':
     data_test = torch.cat([x_test, mask_test, x_test, x_test], dim=1)
 
     data_test = (data_test - data_mean) /data_std
-    # print(x.shape) # (w,h)
+    print("data_test", data_test.shape) # (w,h)
     y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
 
     y_test = (y_test - 301.66) / 12.221
 
     pred_test = best_model(data_test)
-    # pred_test = model(data_test)
+    #pred_test = model(data_test)
     data_test = data_test.detach().cpu().numpy()
     y_test = y_test.detach().cpu().numpy()
     pred_test = pred_test.detach().cpu().numpy()
     data_mean = 301.66
     data_std = 12.221
+    vmin = 268
+    vmax = 323
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean, vmin=268, vmax=323)
+    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
     plt.colorbar(im, ax=axes[0])
     axes[0].set_title("input")
 
-    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean, vmin=268, vmax=323)
+    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
     plt.colorbar(im, ax=axes[1])
     axes[1].set_title('target')
 
-    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean, vmin=268, vmax=323)
+    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
     plt.colorbar(im, ax=axes[2])
     axes[2].set_title('pred')
-    plt.savefig('test_pred.png')
+    plt.savefig('test_pred_nopretrain.png')
+
+    """
+
+    checkpoint = torch.load('/home/code/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
+
+    model = prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same',
+            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
+            classifier=False, inference=False)
+    """
+    model = model.to(device)
+
+    import utils.dataset.era5_extreme_temperature as da
+
+    dataset = da.Era5HeatWave(horizon=28, chip_size=224)
+    train_idx = 0
+    test_idx = 183
+
+    x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+
+    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
+    data = torch.cat([x,mask , x, x,], dim=1)# (1, 6, 224, 224)
+    print("data", data.shape)
+
+    data = (data - data_mean) /data_std
+    # print(x.shape) # (w,h)
+    y = dataset[train_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+
+    y = (y - 301.66) / 12.221
+    best_model = train(model, data, y)
+    # best_model = model
+
+    x_test = dataset[test_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+
+    mask_test = dataset[test_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
+    data_test = torch.cat([x_test, mask_test, x_test, x_test], dim=1)
+
+    data_test = (data_test - data_mean) /data_std
+    print("data_test", data_test.shape) # (w,h)
+    y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+
+    y_test = (y_test - 301.66) / 12.221
+
+    pred_test = best_model(data_test)
+
+    data_test = data_test.detach().cpu().numpy()
+    y_test = y_test.detach().cpu().numpy()
+    pred_test = pred_test.detach().cpu().numpy()
+    data_mean = 301.66
+    data_std = 12.221
+    vmin = np.min(y_test[0, 0]* data_std + data_mean)
+    vmax = np.max(y_test[0, 0]* data_std + data_mean)
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[0])
+    axes[0].set_title("input")
+
+    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[1])
+    axes[1].set_title('target')
+
+    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[2])
+    axes[2].set_title('pred')
+    plt.savefig('test_pred_pretrain_prithvi.png')
+    """

@@ -8,6 +8,11 @@ from model_DecoderUtils import CoreDecoder, EncoderBlock
 from timm.models.vision_transformer import PatchEmbed, Block
 import timm
 from collections import OrderedDict
+import sys
+sys.path.insert(0, '/home/code/EarthExtreme-Bench')
+# from einops import rearrange
+from utils.Prithvi_100M_config import data_mean, data_std
+
 from utils.transformer_utils import get_2d_sincos_pos_embed, get_1d_sincos_pos_embed_from_grid
 # from models.model_CoreCNN import CoreCNNBlock, get_activation
 
@@ -319,30 +324,192 @@ def satmae_vit_cnn(checkpoint, img_size=96, patch_size=8, in_chans=10, output_di
             param.requires_grad = False
 
     return model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+data_mean = torch.FloatTensor(data_mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
+data_std = torch.FloatTensor(data_std).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
+print("data_mean",data_mean.shape)
+def train(model, x , y):
 
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15, 50], gamma=0.5)
 
+    '''Training code'''
+    # Prepare for the optimizer and scheduler
+    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
+
+    # Loss function
+    criterion = nn.L1Loss()
+
+    # training epoch
+    epochs = 500
+
+    loss_list = []
+
+    for i in range(epochs):
+        epoch_loss = 0.0
+
+        optimizer.zero_grad()
+        # with torch.autocast(device_type='cuda', dtype=torch.float16):
+        # /with torch.cuda.amp.autocast():
+        model.train()
+
+        # Note the input and target need to be normalized (done within the function)
+        # Call the model and get the output
+        pred = model(x)  # (1,5,13,721,1440)
+
+        # Normalize gt to make loss compariable
+
+        # We use the MAE loss to train the model
+        # Different weight can be applied for different fields if needed
+        loss = criterion(pred, y)
+        # Call the backward algorithm and calculate the gratitude of parameters
+        # scaler.scale(loss).backward()
+        loss.backward()
+
+        # Update model parameters with Adam optimizer
+        # scaler.step(optimizer)
+        # scaler.update()
+        optimizer.step()
+        epoch_loss += loss.item()
+
+        print("Epoch {} : {:.3f}".format(i, epoch_loss))
+        loss_list.append(epoch_loss)
+        lr_scheduler.step()
+
+        # print("lr",lr_scheduler.get_last_lr()[0])
+    return model
 if __name__ == '__main__':
-    checkpoint = torch.load('/phileo_data/pretrained_models/pretrain-vit-large-e199.pth')
-    checkpoint_model = checkpoint['model']
+    from datetime import datetime
+    start_time = datetime.now()
+
+    """
 
     model = vit_large(img_size=96, patch_size=8, in_chans=10)
-    state_dict = model.state_dict()
+    model = model.to(device)
 
-    # model_sd, shared_weights = load_encoder_weights(checkpoint_model, state_dict)
+    import utils.dataset.era5_extreme_temperature as da
 
-    for k in ['pos_embed', 'patch_embed.proj.weight', 'patch_embed.proj.bias', 'head.weight', 'head.bias']:
-        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-            print(f"Removing key {k} from pretrained checkpoint")
-            del checkpoint_model[k]
+    dataset = da.Era5HeatWave(horizon=28, chip_size=96)
+    train_idx = 0
+    test_idx = 183
 
+    x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
 
-    # load pre-trained model
-    msg = model.load_state_dict(checkpoint_model, strict=False)
-    print(msg)
+    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
+    data = torch.cat([x,mask , x, x, x, x, x, x], dim=1)# (1, 6, 224, 224)
+    print("data", data.shape)
 
-    x = model(torch.randn((4, 10, 96, 96)))
+    data = (data - data_mean) /data_std
+    # print(x.shape) # (w,h)
+    y = dataset[train_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
 
+    y = (y - 301.66) / 12.221
+    best_model = train(model, data, y)
+        # do your work here
+    end_time = datetime.now()
+    print('Duration: {}'.format(end_time - start_time))
 
-    print()
+    # best_model = model
 
-    print('help')
+    x_test = dataset[test_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+
+    mask_test = dataset[test_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
+    data_test = torch.cat([x_test, mask_test, x_test, x_test, x_test, x_test, x_test, x_test], dim=1)
+
+    data_test = (data_test - data_mean) /data_std
+    print("data_test", data_test.shape) # (w,h)
+    y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+
+    y_test = (y_test - 301.66) / 12.221
+
+    pred_test = best_model(data_test)
+    #pred_test = model(data_test)
+    data_test = data_test.detach().cpu().numpy()
+    y_test = y_test.detach().cpu().numpy()
+    pred_test = pred_test.detach().cpu().numpy()
+    data_mean = 301.66
+    data_std = 12.221
+    vmin = 268
+    vmax = 323
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[0])
+    axes[0].set_title("input")
+
+    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[1])
+    axes[1].set_title('target')
+
+    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[2])
+    axes[2].set_title('pred')
+    plt.savefig('test_pred_nopretrain_satMAE.png')
+    # do your work here
+    end_time = datetime.now()
+    print('Duration: {}'.format(end_time - start_time))
+    """
+    checkpoint = torch.load('/home/code/data_storage_home/data/disaster/pretrained_model/pretrain-vit-large-e199.pth')
+    model = satmae_vit_cnn(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same', in_chans=10,
+            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
+            classifier=False)
+
+    model = model.to(device)
+
+    import utils.dataset.era5_extreme_temperature as da
+    import numpy as np
+
+    dataset = da.Era5HeatWave(horizon=28, chip_size=96)
+    train_idx = 0
+    test_idx = 183
+
+    x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+
+    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
+    data = torch.cat([x,mask , x, x, x, x, x, x], dim=1)# (1, 6, 224, 224)
+    print("data", data.shape)
+
+    data = (data - data_mean) /data_std
+    # print(x.shape) # (w,h)
+    y = dataset[train_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+
+    y = (y - 301.66) / 12.221
+    best_model = train(model, data, y)
+    # best_model = model
+        # do your work here
+    end_time = datetime.now()
+    print('Duration: {}'.format(end_time - start_time))
+    x_test = dataset[test_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+
+    mask_test = dataset[test_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
+    data_test = torch.cat([x_test, mask_test, x_test, x_test, x_test, x_test, x_test, x_test], dim=1)
+
+    data_test = (data_test - data_mean) /data_std
+    print("data_test", data_test.shape) # (w,h)
+    y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+
+    y_test = (y_test - 301.66) / 12.221
+
+    pred_test = best_model(data_test)
+
+    data_test = data_test.detach().cpu().numpy()
+    y_test = y_test.detach().cpu().numpy()
+    pred_test = pred_test.detach().cpu().numpy()
+    data_mean = 301.66
+    data_std = 12.221
+    vmin = np.min(y_test[0, 0]* data_std + data_mean)
+    vmax = np.max(y_test[0, 0]* data_std + data_mean)
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[0])
+    axes[0].set_title("input")
+
+    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[1])
+    axes[1].set_title('target')
+
+    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
+    plt.colorbar(im, ax=axes[2])
+    axes[2].set_title('pred')
+    plt.savefig('test_pred_pretrain_satMae.png')

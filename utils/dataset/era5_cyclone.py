@@ -29,7 +29,7 @@ class Record:
         self.df = pd.read_csv(self.file_path / f'{disaster}_surface_records.csv', encoding='unicode_escape')
         self.df_upper = pd.read_csv(self.file_path / f'{disaster}_upper_records.csv', encoding='unicode_escape')
         self.disno = self.df['Disno.']
-        self.max_w = np.max([size, np.max(self.df.W),  np.max(self.df.H)])
+        self.max_w = size
         self.min_w = np.min(self.df.W)
         # To do: read from records
         self.surface_variables = ast.literal_eval(self.df['variables'][0])

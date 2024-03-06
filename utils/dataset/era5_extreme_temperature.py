@@ -27,8 +27,8 @@ class Record:
         self.file_path = EXT_PATH / f"{disaster}-daily"
         self.df = pd.read_csv(self.file_path / f'{disaster}-daily_records.csv', encoding='unicode_escape')
         self.disno = self.df['Disno.']
-        self.max_w = np.max([size, np.max(self.df.W)])
-        self.max_h = np.max([size, np.max(self.df.H)])
+        self.max_w = size
+        self.max_h = size
         self.min_w = np.min(self.df.W)
         self.min_h = np.min(self.df.H)
 

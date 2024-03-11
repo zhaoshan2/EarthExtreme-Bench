@@ -53,8 +53,8 @@ if __name__ == "__main__":
     heatwave = extremeTemperatures[extremeTemperatures['Disaster Subtype'] == 'Heat wave']
     coldwave = extremeTemperatures[extremeTemperatures['Disaster Subtype'] == 'Cold wave']
 
-    # heatwave.to_csv(os.path.join(OUTPUT_FOLDER, f"heatwave_{str(YEAR)}.csv"), index=False)
-    coldwave.to_csv(os.path.join(OUTPUT_FOLDER, f"coldwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
+    heatwave.to_csv(os.path.join(OUTPUT_FOLDER, f"heatwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
+    # coldwave.to_csv(os.path.join(OUTPUT_FOLDER, f"coldwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
     print(f"{heatwave.shape[0]} heatwaves.")
     print(f"{coldwave.shape[0]} coldwaves.")
 

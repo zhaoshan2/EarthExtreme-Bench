@@ -16,7 +16,7 @@ def main():
     CSV_PATH = DISASTER_PATH / 'output_csv'
     DATA_PATH = DISASTER_PATH.parent / 'pangu' / 'surface'
     MASK_PATH = DISASTER_PATH / 'masks'
-    DISASTER = "coldwave" #heatwave, coldwave
+    DISASTER = "heatwave" #heatwave, coldwave
 
     VARIABLE = 't2m'
 
@@ -84,10 +84,10 @@ def main():
 
         ## Spatial Processing
         # Spatial coverage of this disaster (AOI)
-        lon0 = record['min_lon']
-        lon1 = record['max_lon']
-        lat0 = record['max_lat']
-        lat1 = record['min_lat']
+        lon0 = 0.5*(record['min_lon'] + record['max_lat']) - 16
+        lon1 = lon0 + 32
+        lat0 = 0.5*(record['min_lat'] + record['max_lat']) - 16
+        lat1 = lat0 + 32
         # If extends both western and eastern Earth
         if lon0 * lon1 < 0:
             # Western part
@@ -170,15 +170,14 @@ def extract_surface():
 
     SURFACE_VARIABLES = 't2m'
 
-    # extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019to2022_pos.csv'))
-    extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019_pos.csv'))
+    extremeTemperature = pd.read_csv(os.path.join(CSV_PATH, f'{DISASTER}_2019to2022_pos.csv'))
     # Load constant masks
     soil_type = np.load(os.path.join(MASK_PATH, 'soil_type.npy')).astype(np.float32)  # (721,1440)
     topography = np.load(os.path.join(MASK_PATH, 'topography.npy')).astype(np.float32)
     land_mask = np.load(os.path.join(MASK_PATH, 'land_mask.npy')).astype(np.float32)
 
     for i in range(extremeTemperature.shape[0]):
-        OUTPUT_DATA_DIR = Path(__file__).parent.parent / 'data' / f'{DISASTER}-daily'
+        OUTPUT_DATA_DIR = Path(__file__).parent.parent.parent / 'data_storage_home' / 'data' / 'disaster' / 'data' / 'weather' /f'{DISASTER}2022-daily'
         # for i in range(1):
         # ith disaster
         record = extremeTemperature.iloc[i]
@@ -216,6 +215,10 @@ def extract_surface():
         lon1 = record['max_lon']
         lat0 = record['max_lat']
         lat1 = record['min_lat']
+        # lon0 = 0.5*(record['min_lon'] + record['max_lat']) - 16
+        # lon1 = lon0 + 32
+        # lat0 = 0.5*(record['min_lat'] + record['max_lat']) - 16
+        # lat1 = lat0 + 32
 
         # If the disaster spanned within 6 months
         dataset_list = []

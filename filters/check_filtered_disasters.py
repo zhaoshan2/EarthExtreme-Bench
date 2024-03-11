@@ -66,9 +66,12 @@ def cyclone2Png():
                             plt.savefig(os.path.join(EVENT_PNG_FOLDER, f"{filename[:-9]}_{var}_{str(i)}.png"))
 
 def extremeTemperature_attributes():
-    DISASTER = 'coldwave'
+    DISASTER = 'heatwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
+    # OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
+    OUTPUT_DATA_DIR = Path(
+        __file__).parent.parent.parent / 'data_storage_home' / 'data' / 'disaster' / 'data' / 'weather' / f'{DISASTER}2022-daily'
+
     disaster = pd.DataFrame()
 
     for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
@@ -114,7 +117,7 @@ def extremeTemperature_attributes():
 
     # Sort the DataFrame by the 'start' column
     disaster = disaster.sort_values(by='start')
-    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records.csv'), index=False)
+    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}2022-daily_records.csv'), index=False)
 
 def cyclone_attributes():
     DISASTER = 'tropicalCyclone'
@@ -186,7 +189,7 @@ def cyclone_attributes():
     disaster_surface.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_surface_records.csv'), index=False)
 if __name__ == "__main__":
 
-    cyclone_attributes()
+    extremeTemperature_attributes()
 
     """
     installation error 

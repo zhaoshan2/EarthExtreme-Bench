@@ -314,12 +314,71 @@ def extract_surface():
         np.save(os.path.join(OUTPUT_DATA_DIR, f'land_{disno}.npy'), land_mask_cropped)
         np.save(os.path.join(OUTPUT_DATA_DIR, f'topography_{disno}.npy'), topography_cropped)
         np.save(os.path.join(OUTPUT_DATA_DIR, f'soil_type_{disno}.npy'), soil_type_cropped)
+def extract_test_surface():
+    CURR_FOLDER_PATH = Path(__file__).parent
+
+    DISASTER = "heatwave" #heatwave, coldwave
+    DATA_PATH = CURR_FOLDER_PATH.parent / 'data' / 'weather' /f'{DISASTER}-daily'
+    MASK_PATH = CURR_FOLDER_PATH.parent / 'data' / 'masks'
+    TEST_COUNTRY = "US" #US or India
+    SURFACE_VARIABLES = 't2m'
+
+    # Load constant masks
+    soil_type = np.load(os.path.join(MASK_PATH, 'soil_type.npy')).astype(np.float32)  # (721,1440)
+    topography = np.load(os.path.join(MASK_PATH, 'topography.npy')).astype(np.float32)
+    land_mask = np.load(os.path.join(MASK_PATH, 'land_mask.npy')).astype(np.float32)
+
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' /f'{DISASTER}-daily'
+    # Identifier of the disaster event
+    if TEST_COUNTRY == "India":
+        disno = "2023-0328-IND"
+    elif TEST_COUNTRY == "US":
+        disno = "2023-0364-USA"
+    dataset = xr.open_dataset(os.path.join(DATA_PATH, f'{disno}.nc'))
+    surface = dataset[SURFACE_VARIABLES]
+
+    # Longitudinal and latitudinal extent of AOI
+    aoi_longitude = surface["longitude"][:]
+    aoi_longitude_new = slice(aoi_longitude[0],aoi_longitude[-2])
+
+    aoi_latitude = surface["latitude"][:]
+    aoi_latitude_new = slice(aoi_latitude[0],aoi_latitude[-2])
+
+    surface = surface.sel(longitude=aoi_longitude_new, latitude=aoi_latitude_new)
+
+    aoi_longitude = surface["longitude"][:]
+    aoi_latitude = surface["latitude"][:]
+    # Crop masks for AOI
+    land_mask_cropped = data_utils.crop_mask(land_mask, aoi_latitude, aoi_longitude)
+    topography_cropped = data_utils.crop_mask(topography, aoi_latitude, aoi_longitude)
+    soil_type_cropped = data_utils.crop_mask(soil_type, aoi_latitude, aoi_longitude)
+
+    # Aggregated to daily extreme value (max for heatwave and min for coldwave)
+    if DISASTER == "heatwave":
+        surface_vars = surface.resample(time='1D').max()
+    elif DISASTER == "coldwave":
+        surface_vars = surface.resample(time='1D').min()
+    else:
+        print("The Value is not is not aggregated!")
+
+
+    OUTPUT_DATA_DIR = OUTPUT_DATA_DIR / disno
+    if not os.path.exists(OUTPUT_DATA_DIR):
+        os.mkdir(OUTPUT_DATA_DIR)
+
+    # Save disaster data to nc file
+    surface_vars.to_netcdf(os.path.join(OUTPUT_DATA_DIR, f'{disno}.nc'))
+    print("shape", surface_vars.shape)
+    ## Save relevent masks to npy file
+    np.save(os.path.join(OUTPUT_DATA_DIR, f'land_{disno}.npy'), land_mask_cropped)
+    np.save(os.path.join(OUTPUT_DATA_DIR, f'topography_{disno}.npy'), topography_cropped)
+    np.save(os.path.join(OUTPUT_DATA_DIR, f'soil_type_{disno}.npy'), soil_type_cropped)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--engine', default="cfgrib")
     # if grib file, engine=cfgrib
     args = parser.parse_args()
-    extract_surface()
+    extract_test_surface()
 
     """
     installation error 

@@ -1,6 +1,6 @@
 import os
 
-# os.environ["EE_BENCH_DIR"] = "/home/code/EarthExtreme-Bench/data/zip-test"
+# os.environ["EE_BENCH_DIR"] = "/home/EarthExtreme-Bench/data/zip-test"
 
 from pathlib import Path
 from huggingface_hub import HfApi, hf_hub_download
@@ -31,7 +31,7 @@ def decompress_zip_with_progress(zip_file_path, extract_to_folder=None):
 
 
 def download_benchmark():
-    EE_BENCH_DIR = "/home/code/EarthExtreme-Bench/data/zip-test"
+    EE_BENCH_DIR = "/home/EarthExtreme-Bench/data/zip-test"
     local_directory = Path(EE_BENCH_DIR)
     dataset_repo = "zhaoshan/ee-bench_v1.0"
 

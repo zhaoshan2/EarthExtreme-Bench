@@ -9,7 +9,7 @@ from timm.models.vision_transformer import PatchEmbed, Block
 import timm
 from collections import OrderedDict
 import sys
-sys.path.insert(0, '/home/code/EarthExtreme-Bench')
+sys.path.insert(0, '/home/EarthExtreme-Bench')
 # from einops import rearrange
 from utils.Prithvi_100M_config import data_mean, data_std
 

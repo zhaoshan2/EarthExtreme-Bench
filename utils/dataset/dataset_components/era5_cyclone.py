@@ -20,7 +20,7 @@ from torch.utils import data
 import json
 from datetime import datetime, timedelta
 
-EXT_PATH = Path('/home/code/EarthExtreme-Bench/data/weather')
+EXT_PATH = Path('/home/EarthExtreme-Bench/data/weather')
 
 
 class Record:

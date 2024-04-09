@@ -160,7 +160,7 @@ cython_debug/
 .idea/
 
 # To current project
-res/
+results/
 data/
 *.png
 __init__.py

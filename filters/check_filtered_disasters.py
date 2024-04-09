@@ -6,6 +6,7 @@ import xarray as xr
 import pandas as pd
 import os
 from pathlib import Path
+import json
 import argparse
 from datetime import datetime, timedelta
 import datetime
@@ -68,9 +69,9 @@ def cyclone2Png():
 def extremeTemperature_attributes():
     DISASTER = 'heatwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    # OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
-    OUTPUT_DATA_DIR = Path(
-        __file__).parent.parent.parent / 'data_storage_home' / 'data' / 'disaster' / 'data' / 'weather' / f'{DISASTER}2022-daily'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
+    # OUTPUT_DATA_DIR = Path(
+    #     __file__).parent.parent.parent / 'data_storage_home' / 'data' / 'disaster' / 'data' / 'weather' / f'{DISASTER}-daily'
 
     disaster = pd.DataFrame()
 
@@ -78,11 +79,12 @@ def extremeTemperature_attributes():
         for subdir in subdirs:
             for file in os.listdir(os.path.join(root, subdir)):
                 filename = os.fsdecode(file)
-                if filename.endswith(".nc"):
+                if filename.startswith("2023") and filename.endswith(".nc"):
                     dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
                     for var in dataset.data_vars:
                         data = dataset[var].values.astype(np.float32)
                         times = dataset.time
+                        print("times", times)
 
                         aoi_longitude = dataset["longitude"][:]
                         aoi_latitude = dataset["latitude"][:]
@@ -117,7 +119,41 @@ def extremeTemperature_attributes():
 
     # Sort the DataFrame by the 'start' column
     disaster = disaster.sort_values(by='start')
-    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}2022-daily_records.csv'), index=False)
+    disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records_test.csv'), index=False)
+def extremeTemperature_statistics():
+    DISASTER = 'heatwave'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
+    mean_std_dic = {}
+    full_data = []
+    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
+        for subdir in subdirs:
+            for file in os.listdir(os.path.join(root, subdir)):
+                filename = os.fsdecode(file)
+                if filename.endswith(".nc"):
+                    if not filename.startswith("2023"):
+                        dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
+                        for var in dataset.data_vars:
+                            data = dataset[var].values.astype(np.float32)
+                            full_data.append(data.flatten())
+    full_data = np.concatenate(full_data)
+    # print("shape", full_data.shape)
+    mean_std_dic[f"{DISASTER}_mean"] = np.mean(full_data.flatten())
+    mean_std_dic[f"{DISASTER}_std"] = np.std(full_data.flatten())
+
+    # masks
+    MASK_DIR = CURR_FOLDER_PATH.parent / 'data' / 'masks'
+    for root, _, files in os.walk(MASK_DIR):
+        for file in files:
+            mask = np.load(os.path.join(root, file))
+            mean_std_dic[f"{file[:-4]}_mean"] = np.mean(mask.flatten())
+            mean_std_dic[f"{file[:-4]}_std"] = np.std(mask.flatten())
+
+    for key, value in mean_std_dic.items():
+        if isinstance(value, np.float32):
+            mean_std_dic[key] = float(value)
+    with open(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records_stats.json'), 'w') as f:
+        f.write(json.dumps(mean_std_dic))
 
 def cyclone_attributes():
     DISASTER = 'tropicalCyclone'
@@ -189,7 +225,7 @@ def cyclone_attributes():
     disaster_surface.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}_surface_records.csv'), index=False)
 if __name__ == "__main__":
 
-    extremeTemperature_attributes()
+    extremeTemperature_statistics()
 
     """
     installation error 

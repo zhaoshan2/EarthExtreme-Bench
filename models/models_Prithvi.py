@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-
+import json
+import os
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
@@ -19,12 +20,14 @@ from timm.models.layers import to_2tuple
 
 import numpy as np
 import sys
-
-sys.path.insert(0, '/home/code/EarthExtreme-Bench')
+import matplotlib.pyplot as plt
+sys.path.insert(0, '/home/EarthExtreme-Bench')
 # from einops import rearrange
-from utils.Prithvi_100M_config import model_args, data_mean, data_std
+from utils.Prithvi_100M_config import model_args, data_args
 from models.model_DecoderUtils import CoreDecoder
-
+from utils import score
+from utils import logging_utils
+from pathlib import Path
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     embed_dim: output dimension for each position
@@ -325,16 +328,13 @@ def prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='sam
     model.float()
     return model
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-data_mean = torch.FloatTensor(data_mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
-data_std = torch.FloatTensor(data_std).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
-print("data_mean",data_mean.shape)
-
-def train(model, x , y):
+def train(model, train_loader, val_loader, device, save_path: Path, **args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15, 50], gamma=0.5)
-
+    # training epoch
+    epochs = 100
+    patience = 10
     '''Training code'''
     # Prepare for the optimizer and scheduler
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
@@ -342,45 +342,137 @@ def train(model, x , y):
     # Loss function
     criterion = nn.L1Loss()
 
-    # training epoch
-    epochs = 500
-
     loss_list = []
+    best_loss = np.inf
 
     for i in range(epochs):
         epoch_loss = 0.0
 
-        optimizer.zero_grad()
-        # with torch.autocast(device_type='cuda', dtype=torch.float16):
-        # /with torch.cuda.amp.autocast():
-        model.train()
+        for id, train_data in enumerate(train_loader):
 
-        # Note the input and target need to be normalized (done within the function)
-        # Call the model and get the output
-        pred = model(x)  # (1,5,13,721,1440)
+            # with torch.autocast(device_type='cuda', dtype=torch.float16):
+            # /with torch.cuda.amp.autocast():
+            model.train()
 
-        # Normalize gt to make loss compariable
+            # Note the input and target need to be normalized (done within the function)
+            # Call the model and get the output
+            # x (b, w, h), y (b, w, h) ,mask (b, 3, w, h) , disno
+            x = train_data['x'].unsqueeze(1).to(device)  # (b, 1, w, h)
+            mask = train_data['mask'].to(device) # (b, 3, w, h)
+            x_train = torch.cat([x, mask, x, x ], dim=1)  # (b, 6, w, h)
+            y_train = train_data['y'].unsqueeze(1).to(device)
 
-        # We use the MAE loss to train the model
-        # Different weight can be applied for different fields if needed
-        loss = criterion(pred, y)
-        # Call the backward algorithm and calculate the gratitude of parameters
-        # scaler.scale(loss).backward()
-        loss.backward()
+            pred = model(x_train)  # (b,c_out,w,h)
 
-        # Update model parameters with Adam optimizer
-        # scaler.step(optimizer)
-        # scaler.update()
-        optimizer.step()
-        epoch_loss += loss.item()
+            # We use the MAE loss to train the model
+            # Different weight can be applied for different fields if needed
+            loss = criterion(pred, y_train)
+            # Call the backward algorithm and calculate the gratitude of parameters
+            # scaler.scale(loss).backward()
+            optimizer.zero_grad()
+            loss.backward()
 
+            # Update model parameters with Adam optimizer
+            # scaler.step(optimizer)
+            # scaler.update()
+            optimizer.step()
+            epoch_loss += loss.item()
+        epoch_loss /= len(train_loader)
         print("Epoch {} : {:.3f}".format(i, epoch_loss))
         loss_list.append(epoch_loss)
         lr_scheduler.step()
 
-        # print("lr",lr_scheduler.get_last_lr()[0])
-    return model
+        # Validate
+        if i%10 == 0:
+            with torch.no_grad():
+                loss_val = 0
+                for id, val_data in enumerate(val_loader):
+                    x = val_data['x'].unsqueeze(1).to(device)
+                    mask = val_data['mask'].to(device)
+                    x_val = torch.cat([x, mask, x, x], dim=1)
+                    y_val = val_data['y'].unsqueeze(1).to(device)
 
+                    pred_val = model(x_val)
+                    loss = criterion(pred_val, y_val)
+                    loss_val += loss.item()
+                loss_val /= len(val_loader)
+                print("Val loss {} : {:.3f}".format(i, loss_val))
+                if loss_val < best_loss:
+                    best_loss = loss_val
+                    best_epoch = i
+                    best_state = {key: value.cpu() for key, value in model.state_dict().items()}
+                    ckp_path = save_path / str(val_data['meta_info']['disaster'][0])
+                    if not os.path.exists(ckp_path):
+                        os.mkdir(ckp_path)
+                    file_path = os.path.join(ckp_path, "best_model.pth")
+                    with open(file_path, 'wb') as f:
+                        torch.save(best_state, f)
+                else:
+                    if i >= best_epoch + patience:
+                        break
+            # print("lr",lr_scheduler.get_last_lr()[0])
+    return best_state
+
+def test(model, test_loader, device, stats, save_path):
+
+    # turn off gradient tracking for evaluation
+    rmse, acc = dict(), dict()
+    criterion = nn.L1Loss()
+    with torch.no_grad():
+        # iterate through test data
+        for id, test_data in enumerate(test_loader):
+            x = test_data['x'].unsqueeze(1).to(device)
+            mask = test_data['mask'].to(device)
+            x_test = torch.cat([x, mask, x, x], dim=1)
+            y_test = test_data['y'].unsqueeze(1).to(device)
+            target_time = f"{test_data['disno'][0]}-{test_data['meta_info']['target_time'][0]}"
+
+            model.eval()
+            pred_test = model(x_test)
+            loss = criterion(pred_test, y_test)
+
+            # print("Test loss: {:.5f}".format(loss))
+            # pred_test = pred_test.squeeze()
+            # y_test = y_test.squeeze()
+            acc[target_time] = score.unweighted_acc_torch(pred_test, y_test).detach().cpu().numpy()[0]
+            # rmse
+            disaster= test_data['meta_info']['disaster'][0]
+            csv_path = save_path / disaster / 'csv'
+            if not os.path.exists(csv_path):
+                os.mkdir(csv_path)
+
+            output_test = pred_test * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
+            target_test = y_test * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
+
+            rmse[target_time] = score.unweighted_rmse_torch(output_test, target_test).detach().cpu().numpy()[0] #returns channel-wise score mean over w,h,b
+        # Save rmses to csv
+        logging_utils.save_errorScores(csv_path, acc, "acc")
+        logging_utils.save_errorScores(csv_path, rmse, "rmse")
+
+        # visualize the last frame
+        # put all tensors to cpu
+        target_test = target_test.detach().cpu().numpy()
+        x = x.detach().cpu().numpy()
+        output_test = output_test.detach().cpu().numpy()
+        fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+        im = axes[0].imshow(x[0, 0])
+        plt.colorbar(im, ax=axes[0])
+        axes[0].set_title("input")
+
+        im = axes[1].imshow(target_test[0, 0])
+        plt.colorbar(im, ax=axes[1])
+        axes[1].set_title('target')
+
+        im = axes[2].imshow(output_test[0, 0])
+        plt.colorbar(im, ax=axes[2])
+        axes[2].set_title('pred')
+
+        png_path = save_path / disaster / 'png'
+        if not os.path.exists(png_path):
+            os.mkdir(png_path)
+        plt.savefig(f'{png_path}/test_pred_pretrain_prithvi.png')
+
+    return loss
 
 if __name__ == '__main__':
     # main()
@@ -445,67 +537,40 @@ if __name__ == '__main__':
     plt.savefig('test_pred_nopretrain.png')
 
     """
-
-    checkpoint = torch.load('/home/code/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    checkpoint = torch.load('/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
 
     model = prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same',
             decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
             classifier=False, inference=False)
-    """
+
     model = model.to(device)
 
-    import utils.dataset.era5_extreme_temperature as da
+    import utils.dataset.era5_extreme_t2m_dataloader as ext
 
-    dataset = da.Era5HeatWave(horizon=28, chip_size=224)
-    train_idx = 0
-    test_idx = 183
+    heatwave = ext.HeateaveDataloader(batch_size=2,
+                       num_workers=0,
+                       pin_memory=False,
+                       horizon=28,
+                       chip_size=224,
+                       val_ratio=0.5,
+                       data_path='/home/EarthExtreme-Bench/data/weather',
+                       persistent_workers=False)
 
-    x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
-
-    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
-    data = torch.cat([x,mask , x, x,], dim=1)# (1, 6, 224, 224)
-    print("data", data.shape)
-
-    data = (data - data_mean) /data_std
-    # print(x.shape) # (w,h)
-    y = dataset[train_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
-
-    y = (y - 301.66) / 12.221
-    best_model = train(model, data, y)
+    train_loader, records = heatwave.train_dataloader()
+    val_loader, _ = heatwave.val_dataloader()
+    CURR_FOLDER_PATH = Path(__file__).parent.parent #"/home/EarthExtreme-Bench"
+    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'Prithvi_100M'
+    if not os.path.exists(SAVE_PATH):
+        os.mkdir(SAVE_PATH)
+    best_model_state_dict = train(model, train_loader, val_loader, device, save_path=SAVE_PATH)
     # best_model = model
+    checkpoint_trained = torch.load(SAVE_PATH / 'heatwave' / 'best_model.pth')
 
-    x_test = dataset[test_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+    msg = model.load_state_dict(checkpoint_trained)
+    print(msg)
 
-    mask_test = dataset[test_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
-    data_test = torch.cat([x_test, mask_test, x_test, x_test], dim=1)
+    test_loader, _ = heatwave.test_dataloader()
+    _ = test(model, test_loader, device, stats=records.mean_std_dic, save_path=SAVE_PATH)
 
-    data_test = (data_test - data_mean) /data_std
-    print("data_test", data_test.shape) # (w,h)
-    y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
 
-    y_test = (y_test - 301.66) / 12.221
-
-    pred_test = best_model(data_test)
-
-    data_test = data_test.detach().cpu().numpy()
-    y_test = y_test.detach().cpu().numpy()
-    pred_test = pred_test.detach().cpu().numpy()
-    data_mean = 301.66
-    data_std = 12.221
-    vmin = np.min(y_test[0, 0]* data_std + data_mean)
-    vmax = np.max(y_test[0, 0]* data_std + data_mean)
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
-    plt.colorbar(im, ax=axes[0])
-    axes[0].set_title("input")
-
-    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
-    plt.colorbar(im, ax=axes[1])
-    axes[1].set_title('target')
-
-    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
-    plt.colorbar(im, ax=axes[2])
-    axes[2].set_title('pred')
-    plt.savefig('test_pred_pretrain_prithvi.png')
-    """

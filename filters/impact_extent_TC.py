@@ -13,8 +13,8 @@ CURR_FOLDER_PATH = Path(__file__).parent
 DISASTER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home' / 'data' / 'disaster'
 INPUT_POINTS_PATH = DISASTER_PATH / "input_csv" / "ibtracs.since1980.list.v04r00.csv"
 INPUT_EVENTS_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019.csv"
-OUTPUT_TC_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019_ibtracs.csv"
-OUTPUT_CSV_PATH = DISASTER_PATH / "output_csv" / "tropicalCyclone_2019_ibtracs_emdat.csv"
+OUTPUT_TC_PATH = DISASTER_PATH / "output_csv" / 'tropicalCyclone'/ "tropicalCyclone_2019_ibtracs.csv"
+OUTPUT_CSV_PATH = DISASTER_PATH / "output_csv" / 'tropicalCyclone' / "tropicalCyclone_2019_ibtracs_emdat.csv"
 if __name__ == "__main__":
 
     """

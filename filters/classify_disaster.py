@@ -12,8 +12,8 @@ CURR_FOLDER_PATH = Path(__file__).parent
 DATA_FOLDER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home' / 'data' / 'disaster'
 INPUT_CSV_PATH = DATA_FOLDER_PATH / 'input_csv' / "public_emdat_20240207.csv"
 OUTPUT_FOLDER = DATA_FOLDER_PATH / "output_csv"
-START_YEAR = 2019
-END_YEAR = 2022
+START_YEAR = 2023
+END_YEAR = 2023
 if __name__ == "__main__":
 
     totalDisasters = pd.read_csv(INPUT_CSV_PATH, encoding='unicode_escape')
@@ -53,12 +53,12 @@ if __name__ == "__main__":
     heatwave = extremeTemperatures[extremeTemperatures['Disaster Subtype'] == 'Heat wave']
     coldwave = extremeTemperatures[extremeTemperatures['Disaster Subtype'] == 'Cold wave']
 
-    heatwave.to_csv(os.path.join(OUTPUT_FOLDER, f"heatwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
-    # coldwave.to_csv(os.path.join(OUTPUT_FOLDER, f"coldwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
+    # heatwave.to_csv(os.path.join(OUTPUT_FOLDER, 'heatwave', f"heatwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
+    coldwave.to_csv(os.path.join(OUTPUT_FOLDER, 'coldwave', f"coldwave_{str(START_YEAR)}to{str(END_YEAR)}.csv"), index=False)
     print(f"{heatwave.shape[0]} heatwaves.")
     print(f"{coldwave.shape[0]} coldwaves.")
 
     # tropical cyclones
-    tropicalCyclone = meteoroDisasters[meteoroDisasters['Disaster Subtype'] == 'Tropical cyclone']
-    # tropicalCyclone.to_csv(os.path.join(OUTPUT_FOLDER, f"tropicalCyclone_{str(YEAR)}.csv"), index=False)
+    # tropicalCyclone = meteoroDisasters[meteoroDisasters['Disaster Subtype'] == 'Tropical cyclone']
+    # tropicalCyclone.to_csv(os.path.join(OUTPUT_FOLDER, 'tropicalCyclone', f"tropicalCyclone_{str(YEAR)}.csv"), index=False)
     # print(f"{tropicalCyclone.shape[0]} tropical cyclones.")

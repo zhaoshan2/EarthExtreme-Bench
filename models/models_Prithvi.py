@@ -333,8 +333,8 @@ def train(model, train_loader, val_loader, device, save_path: Path, **args):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15, 50], gamma=0.5)
     # training epoch
-    epochs = 100
-    patience = 10
+    epochs = 500
+    patience = 20
     '''Training code'''
     # Prepare for the optimizer and scheduler
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
@@ -451,6 +451,7 @@ def test(model, test_loader, device, stats, save_path):
 
         # visualize the last frame
         # put all tensors to cpu
+        x = x * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
         target_test = target_test.detach().cpu().numpy()
         x = x.detach().cpu().numpy()
         output_test = output_test.detach().cpu().numpy()
@@ -538,17 +539,20 @@ if __name__ == '__main__':
 
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    CURR_FOLDER_PATH = Path(__file__).parent.parent  # "/home/EarthExtreme-Bench"
+    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'Prithvi_100M'
     checkpoint = torch.load('/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
 
     model = prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same',
             decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
             classifier=False, inference=False)
+    model.load_state_dict(torch.load(SAVE_PATH / 'heatwave' / 'best_model_200.pth'))
 
     model = model.to(device)
 
     import utils.dataset.era5_extreme_t2m_dataloader as ext
 
-    heatwave = ext.HeateaveDataloader(batch_size=2,
+    heatwave = ext.HeateaveDataloader(batch_size=16,
                        num_workers=0,
                        pin_memory=False,
                        horizon=28,
@@ -559,15 +563,13 @@ if __name__ == '__main__':
 
     train_loader, records = heatwave.train_dataloader()
     val_loader, _ = heatwave.val_dataloader()
-    CURR_FOLDER_PATH = Path(__file__).parent.parent #"/home/EarthExtreme-Bench"
-    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'Prithvi_100M'
+
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
     best_model_state_dict = train(model, train_loader, val_loader, device, save_path=SAVE_PATH)
     # best_model = model
-    checkpoint_trained = torch.load(SAVE_PATH / 'heatwave' / 'best_model.pth')
-
-    msg = model.load_state_dict(checkpoint_trained)
+    # checkpoint_trained = torch.load(SAVE_PATH / 'heatwave' / 'best_model.pth')
+    msg = model.load_state_dict(best_model_state_dict)
     print(msg)
 
     test_loader, _ = heatwave.test_dataloader()

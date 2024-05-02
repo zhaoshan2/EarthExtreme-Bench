@@ -26,7 +26,7 @@ class Seco(nn.Module):
                                         norm=decoder_norm)
 
         self.decoder_upsample_block = nn.Sequential(DecoderBlock(depth=1, in_channels=2048,
-                                                                 out_channels=2048,                 
+                                                                 out_channels=2048,
                                                                  norm=decoder_norm,
                                                                  activation=decoder_activation,
                                                                  padding=decoder_padding,))
@@ -80,14 +80,15 @@ if __name__ == "__main__":
     from torchinfo import summary
 
     BATCH_SIZE = 4
-    CHANNELS = 3
+    CHANNELS = 4
     HEIGHT = 128
     WIDTH = 128
 
-    model = Seco_Classifier(ckpt_path='/phileo_data/pretrained_models/seco_resnet50_1m.ckpt')
+    model = Seco(ckpt_path='/phileo_data/pretrained_models/seco_resnet50_1m.ckpt')
     model.cpu()
 
-    x = model(torch.randn((BATCH_SIZE, CHANNELS, HEIGHT, WIDTH)))
+    y = model(torch.randn((BATCH_SIZE, CHANNELS, HEIGHT, WIDTH)))
+    print("y shape", y.shape)
 
     summary(
         model,
@@ -95,4 +96,5 @@ if __name__ == "__main__":
     )
 
     sd = model.state_dict()
-    torch.save(sd, 'test.pt')
+    print(sd)
+    # torch.save(sd, 'test.pt')

@@ -15,7 +15,7 @@ model_args = {'depth': 12,
               'img_size': 224,
               'in_chans': 6,
               'num_frames': 1,
-              'num_heads': 12,
+              'num_heads': 3,
               'patch_size': 16,
               'tubelet_size': 1}
 """

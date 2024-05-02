@@ -9,9 +9,9 @@ import argparse
 
 CURR_FOLDER_PATH = Path(__file__).parent
 DATA_FOLDER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home' / 'data' / 'disaster'
-DISASTER = "heatwave" #heatwave, coldwave, tropicalCyclone
-INPUT_CSV_PATH = DATA_FOLDER_PATH / "output_csv" / f"{DISASTER}_2019to2022.csv"
-OUTPUT_CSV_PATH = DATA_FOLDER_PATH / "output_csv" / f"{DISASTER}_2019to2022_pos.csv"
+DISASTER = "coldwave" #heatwave, coldwave, tropicalCyclone
+INPUT_CSV_PATH = DATA_FOLDER_PATH / "output_csv" / DISASTER / f"{DISASTER}_2023to2023.csv"
+OUTPUT_CSV_PATH = DATA_FOLDER_PATH / "output_csv" / DISASTER / f"{DISASTER}_2023to2023_pos.csv"
 OUTPUT_JSON_PATH = DATA_FOLDER_PATH / "output_csv" / "country_extent.json"
 
 if __name__ == "__main__":

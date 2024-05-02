@@ -76,7 +76,6 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
         return meta_info
 
     def resize_sequence(self, file_path, disno, max_w, max_h):
-        current_data = xr.open_dataset(file_path / disno / f'{disno}.nc')
         land_masks = np.load(file_path / disno / f'land_{disno}.npy')
         soil_type_masks = np.load(file_path / disno / f'soil_type_{disno}.npy')
         topography_masks = np.load(file_path / disno / f'topography_{disno}.npy')
@@ -86,10 +85,11 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
 
         mask = np.transpose(mask, (1, 2, 0))
 
-        mask = cv2.resize(mask, (max_w, max_h), interpolation=cv2.INTER_CUBIC)
+        mask = cv2.resize(mask, (max_w, max_h), interpolation=cv2.INTER_LINEAR)
         mask = np.transpose(mask, (2, 0, 1))
         assert mask.shape == (3, self.chip_size, self.chip_size)
 
+        current_data = xr.open_dataset(file_path / disno / f'{disno}.nc')
         t2m = current_data[self.variable].values.astype(np.float32)
 
         new_chips = np.zeros((t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32)

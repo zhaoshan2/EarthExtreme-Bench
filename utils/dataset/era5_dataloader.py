@@ -3,7 +3,7 @@ sys.path.insert(0, '/home/EarthExtreme-Bench')
 from torch.utils.data import DataLoader
 import torch
 import os
-import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+
 from pathlib import Path
 class DataPrefetcher():
     def __init__(self, loader):
@@ -52,6 +52,7 @@ class HeateaveDataloader():
             data_path,
             val_ratio=0.2,
             persistent_workers: bool =True,
+            disaster="heatwave"
     ):
         super().__init__()
         self.horizon = horizon
@@ -62,10 +63,23 @@ class HeateaveDataloader():
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
+        self.disaster = disaster
 
     def train_dataloader(self):
-        data_train = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='train',
+        if self.disaster == "heatwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_train = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='train',
                                           val_ratio=self.val_ratio)
+        elif self.disaster == "coldwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_train = da.Era5ColdWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='train',
+                                          val_ratio=self.val_ratio)
+        elif self.disaster == "tropical cyclone":
+            import utils.dataset.dataset_components.era5_cyclone_dataset as da
+            data_train = da.TCDataset(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='train',
+                                          val_ratio=self.val_ratio)
+        else:
+            raise Exception("Sorry, the disaster is not included")
         return DataLoader(
             dataset= data_train,
             batch_size=self.batch_size,
@@ -77,8 +91,21 @@ class HeateaveDataloader():
         ), data_train.records
 
     def val_dataloader(self):
-        data_val = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='val',
+        if self.disaster == "heatwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_val = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='val',
                                         val_ratio=self.val_ratio)
+        elif self.disaster == "coldwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_val = da.Era5ColdWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='val',
+                                        val_ratio=self.val_ratio)
+        elif self.disaster == "tropical cyclone":
+            import utils.dataset.dataset_components.era5_cyclone_dataset as da
+            data_val = da.TCDataset(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='val',
+                                        val_ratio=self.val_ratio)
+        else:
+            raise Exception("Sorry, the disaster is not included")
+
         return DataLoader(
             dataset=data_val,
             batch_size=self.batch_size,
@@ -90,8 +117,21 @@ class HeateaveDataloader():
         ), data_val.records
 
     def test_dataloader(self):
-        data_test = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='test',
+        if self.disaster == "heatwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_test = da.Era5HeatWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='test',
                                     val_ratio=self.val_ratio)
+        elif self.disaster == "coldwave":
+            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+            data_test = da.Era5ColdWave(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='test',
+                                    val_ratio=self.val_ratio)
+        elif self.disaster == "tropical cyclone":
+            import utils.dataset.dataset_components.era5_cyclone_dataset as da
+            data_test = da.TCDataset(horizon=self.horizon, chip_size=self.chip_size, data_path=self.data_path, split='test',
+                                    val_ratio=self.val_ratio)
+        else:
+            raise Exception("Sorry, the disaster is not included")
+
         return DataLoader(
             dataset=data_test,
             batch_size=1,
@@ -101,6 +141,7 @@ class HeateaveDataloader():
             persistent_workers=self.persistent_workers,
             drop_last=False
         ), data_test.records
+
 if __name__ == "__main__":
     # dataset_path ='/home/code/data_storage_home/data/pangu'
     # means, std = LoadStatic(os.path.join(dataset_path, 'aux_data'))

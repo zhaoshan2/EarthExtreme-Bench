@@ -193,3 +193,26 @@ def top_quantiles_error_torch(pred: torch.Tensor, target: torch.Tensor) -> torch
     P_tar = torch.quantile(target.view(n, c, h * w), q=qtile, dim=-1)
     P_pred = torch.quantile(pred.view(n, c, h * w), q=qtile, dim=-1)
     return torch.mean(P_pred - P_tar, dim=0)
+
+
+def rainfall_to_pixel(rainfall_intensity, a=None, b=None):
+    """Convert the rainfall intensity to pixel values
+
+    Parameters
+    ----------
+    rainfall_intensity : np.ndarray
+    a : float32, optional
+    b : float32, optional
+
+    Returns
+    -------
+    pixel_vals : np.ndarray
+    """
+    if a is None:
+        a = 58.53
+    if b is None:
+        b = 1.56
+    dBR = np.log10(rainfall_intensity) * 10.0
+    dBZ = dBR * b + 10.0 * np.log10(a)
+    pixel_vals = (dBZ + 10.0) / 70.0
+    return pixel_vals

@@ -41,7 +41,7 @@ class DataPrefetcher():
         """Return the number of images."""
         return self.length
 
-class HeateaveDataloader():
+class ERA5Dataloader():
     def __init__(
             self,
             batch_size,
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     # dataset_path ='/home/code/data_storage_home/data/pangu'
     # means, std = LoadStatic(os.path.join(dataset_path, 'aux_data'))
     # print(means.shape) #(1, 21, 1, 1)
-    heatwave = HeateaveDataloader(2,
+    heatwave = ERA5Dataloader(2,
             0,
             False,
             28,

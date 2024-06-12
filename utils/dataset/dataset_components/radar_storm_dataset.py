@@ -75,6 +75,8 @@ class HDFIterator:
         else:
             # return retval, datetime_seqs, self._compute_mask(retval)
             masks = self._compute_mask(retval)
+            # x: in_seq_length, B, 1, h, w -> 5, B, 1, 480, 480
+            # datetime_seq: List of length 1, e.g., [Timestamp('2018-10-29 14:50:00')] the starting time
             sample = {
                 "x": torch.from_numpy(retval[:self.in_seq_length, ...].astype(self.return_type)),
                 "y": torch.from_numpy(retval[-self.out_seq_length:,...].astype(self.return_type)),

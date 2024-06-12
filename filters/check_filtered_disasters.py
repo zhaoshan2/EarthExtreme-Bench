@@ -12,21 +12,23 @@ from datetime import datetime, timedelta
 import datetime
 
 # Each image is normalzied for better visualization
-def main():
-    DISASTER = 'heatwave'
+def temperature2Png():
+    DISASTER = 'coldwave'
     CURR_FOLDER_PATH = Path(__file__).parent
     OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
     for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
         for subdir in subdirs:
             for file in os.listdir(os.path.join(root, subdir)):
                 filename = os.fsdecode(file)
-                if filename.endswith("2019-0650-GBR.nc"):
+                if filename.endswith("2022-0800-MNG.nc"):
                     dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
                     var = "t2m"
                     data = dataset[var].values.astype(np.float32)
                     times = dataset.time
-                    min_v = np.percentile(data, 1)
-                    max_v = np.percentile(data, 99)
+                    # min_v = np.percentile(data, 1)
+                    # max_v = np.percentile(data, 99)
+                    min_v = 225
+                    max_v = 281
                     # print(filename, "{:.2f}".format(np.max(t2m) - 273))
                     for i in range(data.shape[0]):
                         plt.figure()
@@ -120,6 +122,38 @@ def extremeTemperature_attributes():
     # Sort the DataFrame by the 'start' column
     disaster = disaster.sort_values(by='start')
     disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records_test.csv'), index=False)
+
+def regionalDailyExtremeTemperature():
+    DISASTER = 'heatwave'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
+    DISNO = "2019-0217-IND"
+    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
+        for subdir in subdirs:
+            for file in os.listdir(os.path.join(root, subdir)):
+                filename = os.fsdecode(file)
+                if filename.endswith(f"{DISNO}.nc"):
+                # if filename.endswith(".nc"):
+                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
+                    var = "t2m"
+                    data = dataset[var].values.astype(np.float32)
+                    print("data.", data.shape)
+                    times = dataset.time
+                    if DISASTER == "coldwave":
+                        print("minimun value returned")
+                        extreme_data = np.min(data, axis=(-1,-2))
+                    elif DISASTER == "heatwave":
+                        print("max value returned")
+                        extreme_data = np.max(data, axis=(-1,-2))
+                    print("max_data", extreme_data.shape)
+    current_times = []
+    for i in range(len(times)):
+        current_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d')
+        current_times.append(current_time)
+    with open(os.path.join(OUTPUT_DATA_DIR, f'{DISNO}_regional_extT.txt'), 'w') as file:
+        for item1, item2 in zip(current_times, extreme_data):
+           file.write(f"{item1}\t{item2}\n")  # Using tab as the separator
+
 def extremeTemperature_statistics():
     DISASTER = 'coldwave'
     CURR_FOLDER_PATH = Path(__file__).parent
@@ -331,7 +365,7 @@ def cyclone_upper_statistics():
 
 if __name__ == "__main__":
 
-    extremeTemperature_attributes()
+    regionalDailyExtremeTemperature()
 
     """
     installation error 

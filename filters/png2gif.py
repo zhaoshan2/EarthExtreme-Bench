@@ -18,9 +18,9 @@ def create_gif(root, image_list, gif_name, duration=0.1):
     return
 
 def main():
-    DISASTER = 'heatwave'
+    DISASTER = 'coldwave'
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather'/ f'{DISASTER}-daily' / '2019-0650-GBR' / 'PNG'
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather'/ f'{DISASTER}-daily' / '2022-0800-MNG' / 'PNG'
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):

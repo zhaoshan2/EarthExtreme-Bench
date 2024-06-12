@@ -216,3 +216,21 @@ def rainfall_to_pixel(rainfall_intensity, a=None, b=None):
     dBZ = dBR * b + 10.0 * np.log10(a)
     pixel_vals = (dBZ + 10.0) / 70.0
     return pixel_vals
+
+
+def uint2single(x):
+    """
+    uint8 to float32 [0,255] to [0,1]
+    """
+    return np.float32(x / 255.)
+
+
+def single2uint(x):
+    """
+    float32 to uint8 [0,1] to [0,255]
+    """
+    return np.uint8((x.clip(0, 1) * 255.).round())
+
+def tensor2uint(x):
+    x = x.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    return np.uint8((x * 255.0).round())

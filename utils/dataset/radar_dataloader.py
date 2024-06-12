@@ -112,33 +112,25 @@ class RADARDataloader():
 
 if __name__ == "__main__":
     import torch
+    from datetime import timedelta
     import numpy as np
     dataset_path ='/home/EarthExtreme-Bench/data/weather/storm-minutes'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataloader = RADARDataloader(data_path=dataset_path, batch_size=1)
-    loader = dataloader.train_dataloader()
+    dataloader = RADARDataloader(data_path=dataset_path, batch_size=1, val_ratio=0.0024)
+    loader = dataloader.val_dataloader()
 
     sample = next(loader)
 
     data, label, mask, datetime_clip = sample['x'], sample['y'], sample['mask'], sample['datetime_seqs']
-
+    print(datetime_clip)
+    print(torch.amax(data))
+    print(torch.amax(label))
     import matplotlib.pyplot as plt
 
-    plt.figure()
-
-    plt.imshow(data[0,0,0])
-    plt.colorbar()
-    title_time = datetime_clip[0]
-    plt.title(f'precipitation_{title_time}')
-    plt.savefig('radar_img.png')
-
-    plt.figure()
-    plt.imshow(label[0,0,0])
-    plt.colorbar()
-    plt.title(f'precipitation_label')
-    plt.savefig('label.png')
-
-    plt.figure()
-    plt.imshow(mask[0,0,0]*data[0,0,0])
-    plt.title('masked')
-    plt.savefig('precipitation_masked.png')
+    # for i in range(data.shape[0]):
+    #     plt.figure()
+    #     plt.imshow(mask[i,0,0] * data[i,0,0], vmin=0, vmax=1, cmap="magma")
+    #     plt.colorbar()
+    #     title_time = datetime_clip[0] + timedelta(minutes=5*i)
+    #     plt.title(f'precipitation_{title_time}')
+    #     plt.savefig(f'radar_img_{i}.png', dpi=200)

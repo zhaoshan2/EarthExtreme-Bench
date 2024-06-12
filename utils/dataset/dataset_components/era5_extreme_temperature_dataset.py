@@ -94,7 +94,7 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
 
         new_chips = np.zeros((t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32)
         for slice in range(t2m.shape[0]):
-            new_t2m_slice = cv2.resize(t2m[slice], (max_w, max_h), interpolation=cv2.INTER_CUBIC)
+            new_t2m_slice = cv2.resize(t2m[slice], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
             new_chips[slice] = new_t2m_slice
 
         return new_chips, current_data, mask

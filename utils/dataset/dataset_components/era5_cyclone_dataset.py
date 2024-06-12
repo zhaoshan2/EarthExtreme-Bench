@@ -170,7 +170,7 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
         for i in range(surface_data.shape[0]):
             for j in range(surface_data.shape[1]):
                 # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
-                new_surface_slice = cv2.resize(surface_data[i,j], (max_w, max_h), interpolation=cv2.INTER_CUBIC)
+                new_surface_slice = cv2.resize(surface_data[i,j], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
                 new_chips[i,j,:,:] = new_surface_slice
 
         new_upper_chips = np.zeros((upper_data.shape[0], upper_data.shape[1], upper_data.shape[2], max_w, max_h),
@@ -178,7 +178,7 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
         for i in range(upper_data.shape[0]):
             for j in range(upper_data.shape[1]):
                 for k in range(upper_data.shape[2]):
-                    new_upper_slice = cv2.resize(upper_data[i,j,k], (max_w, max_h), interpolation=cv2.INTER_CUBIC)
+                    new_upper_slice = cv2.resize(upper_data[i,j,k], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
                     new_upper_chips[i, j, k, :,:] = new_upper_slice
         # return surface_data, upper_data, current_xr_surface, mask
         return new_chips, new_upper_chips, current_xr_surface, mask

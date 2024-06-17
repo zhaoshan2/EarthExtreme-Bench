@@ -94,7 +94,7 @@ if __name__ == "__main__":
     plt.imshow(mask)
     plt.colorbar()
     plt.title('mask')
-    plt.savefig('test_label_loader.png')
+    plt.savefig('test_label_loader.png',dpi=200)
 
     # CHW ->  HWC
     vis = np.moveaxis(img, 0,-1)
@@ -112,5 +112,5 @@ if __name__ == "__main__":
     plt.imshow(rgb)
     plt.colorbar()
     plt.title('merged')
-    plt.savefig('test_input_loader.png')
+    plt.savefig('test_input_loader.png', dpi=200)
 

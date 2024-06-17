@@ -2,7 +2,7 @@ from huggingface_hub import HfApi
 import os
 from pathlib import Path
 def upload_wewather_dataset():
-    LOCAL_DATA_DIR = Path(__file__).parent.parent / 'data'
+    LOCAL_DATA_DIR = Path(__file__).parent.parent / 'data' / 'weather'
     api = HfApi()
     #api.create_repo(repo_id="ee-bench_v1.0", repo_type="dataset", private=True)
     for root, subdirs, _ in os.walk(LOCAL_DATA_DIR):
@@ -39,4 +39,4 @@ def upload_eo_dataset():
                         repo_type="dataset"
                     )
 if __name__ == "__main__":
-    upload_eo_dataset()
+    upload_wewather_dataset()

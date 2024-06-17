@@ -79,20 +79,20 @@ if __name__ == '__main__':
     locations = [
         {"name": "Houston, US", "latitude": 29.7604, "longitude": -95.3698},
         {"name": "Lumberton, US", "latitude": 34.6182, "longitude": -79.0086},
-        {"name": "Sainte-Marthe-sur-le-Lac, Canada", "latitude": 45.5302, "longitude": -73.9269},
+        # {"name": "Sainte-Marthe-sur-le-Lac, Canada", "latitude": 45.5302, "longitude": -73.9269},
         {"name": "Beledweyne, Somalia", "latitude": 4.7368, "longitude": 45.2033},
         {"name": "Beira, Mozambique", "latitude": -19.8173, "longitude": 34.8156},
         {"name": "Jubba, Somalia", "latitude": 4.8517, "longitude": 31.5825},  # Assuming Juba, South Sudan
-        {"name": "Lokoja, Nigeria", "latitude": 7.8023, "longitude": 6.7333},  # Corrected country to Nigeria
-        {"name": "Iwaki, Japan", "latitude": 37.0507, "longitude": 140.8928},
-        {"name": "Koriyama, Japan", "latitude": 37.4000, "longitude": 140.3833},
-        {"name": "Weihui, China", "latitude": 35.4030, "longitude": 114.0658},
+        # {"name": "Lokoja, Nigeria", "latitude": 7.8023, "longitude": 6.7333},  # Corrected country to Nigeria
+        # {"name": "Iwaki, Japan", "latitude": 37.0507, "longitude": 140.8928},
+        # {"name": "Koriyama, Japan", "latitude": 37.4000, "longitude": 140.3833},
+        # {"name": "Weihui, China", "latitude": 35.4030, "longitude": 114.0658},
         {"name": "Aqqala, Iran", "latitude": 37.0133, "longitude": 54.4556},
-        {"name": "Zhuozhou, China", "latitude": 39.4855, "longitude": 115.9730},
+        # {"name": "Zhuozhou, China", "latitude": 39.4855, "longitude": 115.9730},
         {"name": "Langfang, China", "latitude": 39.5097, "longitude": 116.6945},
-        {"name": "Coraki, Australia", "latitude": -28.8085, "longitude": 153.2030},
-        {"name": "Sydney, Australia", "latitude": -33.8688, "longitude": 151.2093},
-        {"name": "Nova Kakhovka, Ukraine", "latitude": 46.7545, "longitude": 33.3792}
+        # {"name": "Coraki, Australia", "latitude": -28.8085, "longitude": 153.2030},
+        {"name": "Sydney, Australia", "latitude": -33.8688, "longitude": 151.2093}
+        # {"name": "Nova Kakhovka, Ukraine", "latitude": 46.7545, "longitude": 33.3792}
     ]
 
     for location in locations:
@@ -100,4 +100,4 @@ if __name__ == '__main__':
         x, y = m(location['longitude'], location['latitude'])
         m.plot(x, y, marker="^", color='lime')
 
-    plt.savefig("test.png", dpi=300)
+    plt.savefig("figures/test.png", dpi=300)

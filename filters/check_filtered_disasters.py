@@ -123,36 +123,7 @@ def extremeTemperature_attributes():
     disaster = disaster.sort_values(by='start')
     disaster.to_csv(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-daily_records_test.csv'), index=False)
 
-def regionalDailyExtremeTemperature():
-    DISASTER = 'heatwave'
-    CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'weather' / f'{DISASTER}-daily'
-    DISNO = "2019-0217-IND"
-    for root, subdirs, _ in os.walk(OUTPUT_DATA_DIR):
-        for subdir in subdirs:
-            for file in os.listdir(os.path.join(root, subdir)):
-                filename = os.fsdecode(file)
-                if filename.endswith(f"{DISNO}.nc"):
-                # if filename.endswith(".nc"):
-                    dataset = xr.open_dataset(os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename)) # single vars
-                    var = "t2m"
-                    data = dataset[var].values.astype(np.float32)
-                    print("data.", data.shape)
-                    times = dataset.time
-                    if DISASTER == "coldwave":
-                        print("minimun value returned")
-                        extreme_data = np.min(data, axis=(-1,-2))
-                    elif DISASTER == "heatwave":
-                        print("max value returned")
-                        extreme_data = np.max(data, axis=(-1,-2))
-                    print("max_data", extreme_data.shape)
-    current_times = []
-    for i in range(len(times)):
-        current_time = pd.to_datetime(times[i].values).strftime('%Y-%m-%d')
-        current_times.append(current_time)
-    with open(os.path.join(OUTPUT_DATA_DIR, f'{DISNO}_regional_extT.txt'), 'w') as file:
-        for item1, item2 in zip(current_times, extreme_data):
-           file.write(f"{item1}\t{item2}\n")  # Using tab as the separator
+
 
 def extremeTemperature_statistics():
     DISASTER = 'coldwave'

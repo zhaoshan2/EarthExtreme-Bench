@@ -15,10 +15,36 @@ import xarray as xr
 import pickle
 from collections import OrderedDict
 from torch.utils import data
-
+import random
 import json
 from datetime import datetime, timedelta
 
+
+def resize_and_crop(img, dst_w, dst_h):
+    # Get the dimensions of the image
+    height, width = img.shape[:2]
+
+    # Calculate the aspect ratio
+    aspect_ratio = width / height
+    shorter_side_length = min(dst_w, dst_h)
+
+    # Resize the image
+    if width < height:
+        new_width = shorter_side_length
+        new_height = int(shorter_side_length / aspect_ratio)
+    else:
+        new_height = shorter_side_length
+        new_width = int(shorter_side_length * aspect_ratio)
+
+    resized_img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+    # Randomly crop a 224x224 region from the resized image
+    x = random.randint(0, new_width - dst_h)
+    y = random.randint(0, new_height - dst_w)
+
+    cropped_img = resized_img[y:y + dst_h, x:x + dst_w,...]
+
+    return cropped_img
 class Record:
     def __init__(self, disaster: str, size: int, path: str, split: str, val_ratio: float, debug: bool):
         self.file_path = Path(path) / f"{disaster}-daily"
@@ -85,8 +111,9 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
 
         mask = np.transpose(mask, (1, 2, 0))
 
-        mask = cv2.resize(mask, (max_w, max_h), interpolation=cv2.INTER_LINEAR)
+        mask = resize_and_crop(mask, max_w, max_h)
         mask = np.transpose(mask, (2, 0, 1))
+
         assert mask.shape == (3, self.chip_size, self.chip_size)
 
         current_data = xr.open_dataset(file_path / disno / f'{disno}.nc')
@@ -94,7 +121,7 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
 
         new_chips = np.zeros((t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32)
         for slice in range(t2m.shape[0]):
-            new_t2m_slice = cv2.resize(t2m[slice], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
+            new_t2m_slice = resize_and_crop(t2m[slice], max_w, max_h)
             new_chips[slice] = new_t2m_slice
 
         return new_chips, current_data, mask
@@ -177,21 +204,20 @@ class Era5ColdWave(BaseWaveDataset):
 
 if __name__ == "__main__":
     path = '/home/EarthExtreme-Bench/data/weather'
-    dataset = Era5HeatWave(horizon=28, chip_size=128, data_path=path, split='test',
+    dataset = Era5HeatWave(horizon=28, chip_size=256, data_path=path, split='test',
                                           val_ratio=0.5)
     print(f"The dataset length is {len(dataset)}")
     print(list(dataset.chip_metadic.keys())[40])
     x = dataset[40]
     print(f"The dataset has {len(list(dataset.chip_metadic.keys()))} keys")
     print(x["meta_info"]['input_time'])
-    for i, j in x.items():
-        print(j.shape)
+
 
     import matplotlib.pyplot as plt
 
     plt.figure()
 
-    plt.imshow(x['image'], vmin=torch.min(x['y']), vmax=torch.max(x['y']))
+    plt.imshow(x['x'], vmin=torch.min(x['y']), vmax=torch.max(x['y']))
     plt.colorbar()
     title_time = x["meta_info"]['input_time']
     plt.title(f't2m_{title_time}')

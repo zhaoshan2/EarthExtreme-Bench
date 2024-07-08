@@ -19,7 +19,31 @@ from torch.utils import data
 
 import json
 from datetime import datetime, timedelta
+import random
+def resize_and_crop(img, dst_w, dst_h):
+    # Get the dimensions of the image
+    height, width = img.shape[:2]
 
+    # Calculate the aspect ratio
+    aspect_ratio = width / height
+    shorter_side_length = min(dst_w, dst_h)
+
+    # Resize the image
+    if width < height:
+        new_width = shorter_side_length
+        new_height = int(shorter_side_length / aspect_ratio)
+    else:
+        new_height = shorter_side_length
+        new_width = int(shorter_side_length * aspect_ratio)
+
+    resized_img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+    # Randomly crop a 224x224 region from the resized image
+    x = random.randint(0, new_width - dst_h)
+    y = random.randint(0, new_height - dst_w)
+
+    cropped_img = resized_img[y:y + dst_h, x:x + dst_w, ...]
+
+    return cropped_img
 class Record:
     def __init__(self, disaster: str, size: int, path: str, split: str, val_ratio: float):
         self.file_path = Path(path) / f"{disaster}-hourly"
@@ -154,8 +178,7 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
             (land_masks[np.newaxis, ...], soil_type_masks[np.newaxis, ...], topography_masks[np.newaxis, ...]), axis=0)
 
         mask = np.transpose(mask, (1, 2, 0))
-
-        mask = cv2.resize(mask, (max_w, max_h), interpolation=cv2.INTER_LINEAR)
+        mask = resize_and_crop(mask, max_w, max_h)
         mask = np.transpose(mask, (2, 0, 1))
         assert mask.shape == (3, self.chip_size, self.chip_size)
 
@@ -170,7 +193,7 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
         for i in range(surface_data.shape[0]):
             for j in range(surface_data.shape[1]):
                 # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
-                new_surface_slice = cv2.resize(surface_data[i,j], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
+                new_surface_slice = resize_and_crop(surface_data[i,j], max_w, max_h)
                 new_chips[i,j,:,:] = new_surface_slice
 
         new_upper_chips = np.zeros((upper_data.shape[0], upper_data.shape[1], upper_data.shape[2], max_w, max_h),
@@ -178,7 +201,7 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
         for i in range(upper_data.shape[0]):
             for j in range(upper_data.shape[1]):
                 for k in range(upper_data.shape[2]):
-                    new_upper_slice = cv2.resize(upper_data[i,j,k], (max_w, max_h), interpolation=cv2.INTER_LINEAR)
+                    new_upper_slice = resize_and_crop(upper_data[i,j,k], max_w, max_h)
                     new_upper_chips[i, j, k, :,:] = new_upper_slice
         # return surface_data, upper_data, current_xr_surface, mask
         return new_chips, new_upper_chips, current_xr_surface, mask
@@ -260,10 +283,10 @@ if __name__ == "__main__":
 
     label = x['y'][0, 0].numpy()
     print(x["meta_info"]['raw_H'], x["meta_info"]['raw_W'])
-    label = cv2.resize(label, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
+    # label = cv2.resize(label, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
 
     x_upper = x['x_upper'][0,0,0].numpy()
-    x_upper = cv2.resize(x_upper, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
+    # x_upper = cv2.resize(x_upper, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
 
     import matplotlib.pyplot as plt
 

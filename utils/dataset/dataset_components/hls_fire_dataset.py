@@ -10,6 +10,8 @@ import sys
 sys.path.insert(0, '/home/EarthExtreme-Bench')
 from utils import score
 import cv2
+
+
 class BaseHlsFireDataset(torch.utils.data.Dataset):
     """
     1, Blue, B02
@@ -33,6 +35,31 @@ class BaseHlsFireDataset(torch.utils.data.Dataset):
         self.val_ratio = val_ratio
 
         self.filenames = self._read_split()  # read train/valid/test splits
+    def _normalization(self, image):
+        img_norm_cfg = dict(
+            means=[
+                0.033349706741586264,
+                0.05701185520536176,
+                0.05889748132001316,
+                0.2323245113436119,
+                0.1972854853760658,
+                0.11944914225186566,
+            ],
+            stds=[
+                0.02269135568823774,
+                0.026807560223070237,
+                0.04004109844362779,
+                0.07791732423672691,
+                0.08708738838140137,
+                0.07241979477437814,
+            ],
+         )
+        means = np.array(img_norm_cfg['means'])
+        stds = np.array(img_norm_cfg['stds'])
+        image = (image - means[:, None, None]) /stds[:, None, None]
+        return image
+
+
     def _transform(self, x: Dict):
         if self.transform == 'resize':
             image = x['image'] #CHW
@@ -40,18 +67,17 @@ class BaseHlsFireDataset(torch.utils.data.Dataset):
             new_chips = np.zeros((image.shape[0], self.chip_size, self.chip_size), dtype=np.float32)
             for i in range(image.shape[0]):
                 # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
-                new_slice = cv2.resize(image[i], (self.chip_size, self.chip_size), interpolation=cv2.INTER_LINEAR)
+                new_slice = cv2.resize(image[i], (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST)
                 new_chips[i, :, :] = new_slice
             new_mask = cv2.resize(mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST)
             x['image'] = new_chips
             x['mask'] = new_mask
-            return x
+        return x
 
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-
         filename = self.filenames[idx]
         image_path = os.path.join(self.data_path, self.folder, f"{filename}_merged.tif")
         mask_path = os.path.join(self.data_path, self.folder, f"{filename}.mask.tif")
@@ -59,6 +85,8 @@ class BaseHlsFireDataset(torch.utils.data.Dataset):
         with rasterio.open(image_path) as dataset:
             if self.bands is None:
                 image = dataset.read() # CHW
+                image = self._normalization(image)
+
             elif self.bands == "rgb":
                 red = dataset.read(3)
                 green = dataset.read(2)
@@ -67,7 +95,10 @@ class BaseHlsFireDataset(torch.utils.data.Dataset):
                 image = np.stack((red, green, blue), axis=-1)
 
         mask = np.array(Image.open(mask_path)) # (512,512)
-        sample = dict(image=image, mask=mask)
+
+        # convert missing data to nonfire
+        mask[mask == -1] = 0
+        sample = dict(image=image, mask=mask, id=filename)
         if self.transform is not None:
             sample = self._transform(sample)
 
@@ -90,6 +121,7 @@ class BaseHlsFireDataset(torch.utils.data.Dataset):
 
 
 class HlsFireDataset(BaseHlsFireDataset):
+
     def __getitem__(self, *args, **kwargs):
 
         sample = super().__getitem__(*args, **kwargs)
@@ -102,8 +134,7 @@ class HlsFireDataset(BaseHlsFireDataset):
         # CHW
         sample["x"] = torch.tensor(image, dtype=torch.float32)
         # mask shape 1HW
-        sample["y"] = torch.tensor(np.expand_dims(mask, 0), dtype=torch.int32)
-
+        sample["y"] = torch.tensor(np.expand_dims(mask, 0), dtype=torch.float32)
         return sample
 
 if __name__ == '__main__':

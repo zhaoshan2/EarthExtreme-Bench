@@ -133,7 +133,7 @@ def test(model, test_loader, device, stats, save_path, model_id):
             target_test = y_test * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
 
             rmse[target_time] = score.unweighted_rmse_torch(output_test, target_test).detach().cpu().numpy()[0] #returns channel-wise score mean over w,h,b
-                    # visualize the last frame
+            # visualize the last frame
             # put all tensors to cpu
             x = x * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
             target_test = target_test.detach().cpu().numpy()
@@ -155,13 +155,14 @@ def test(model, test_loader, device, stats, save_path, model_id):
             png_path = save_path / disaster / 'png' / model_id
             if not os.path.exists(png_path):
                 os.makedirs(png_path)
-            plt.savefig(f'{png_path}/test_pred_random_{target_time}.png')
+            plt.savefig(f'{png_path}/test_pred_{target_time}.png')
         # Save rmses to csv
 
             total_loss += loss
         total_loss = total_loss / id
         logging_utils.save_errorScores(csv_path, acc, "acc")
         logging_utils.save_errorScores(csv_path, rmse, "rmse")
+
 
 
 

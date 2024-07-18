@@ -9,7 +9,7 @@ import cartopy.feature as cfeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 def plot_aoi_tc(file_path, variable_name):
     ds = xr.open_dataset(file_path)
-    print(ds)
+    # print(ds)
     ds = ds.sel(time=ds.time[0])
     lats = ds['latitude']
     lons = ds['longitude']
@@ -27,7 +27,7 @@ def plot_aoi_heat(file_path, variable_name):
     ds = xr.open_dataset(file_path)
 
     # Print the dataset to understand its structure
-    print(ds)
+    # print(ds)
     ds = ds.sel(time=ds.time[0])
     lats = ds['latitude']
     lons = ds['longitude']
@@ -60,13 +60,13 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disaster", default='tropicalCyclone')
+    parser.add_argument("--disaster", default='coldwave')
     args = parser.parse_args()
 
     DISASTER = args.disaster
     # Create a figure and axis
     fig = plt.figure(figsize=(12, 6))
-    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax = plt.axes(projection=ccrs.Robinson())
     ax.set_global()
     CURR_FOLDER_PATH = Path(__file__).parent
 
@@ -125,12 +125,11 @@ if __name__ == '__main__':
                     if filename.endswith(".nc"):
                         filepath = os.path.join(OUTPUT_DATA_DIR, filename[:-3], filename) # single vars
                         var = "t2m"
-                        plot_aoi_heat(filepath, var)
+                        plot_aoi_cold(filepath, var)
     # Add coastlines and other features
-    ax.coastlines()
-    ax.add_feature(cfeature.BORDERS)
-    ax.add_feature(cfeature.LAND)
-    ax.add_feature(cfeature.OCEAN)
+    ax.add_feature(cfeature.BORDERS, edgecolor="lightgrey")
+    ax.add_feature(cfeature.LAND, facecolor='white')
+    ax.add_feature(cfeature.OCEAN, facecolor='lightgrey')
     # Add gridlines and labels
     gl = ax.gridlines(draw_labels=True)
     gl.top_labels = False

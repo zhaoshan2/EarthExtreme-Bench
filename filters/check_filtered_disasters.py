@@ -10,7 +10,8 @@ import json
 import argparse
 from datetime import datetime, timedelta
 import datetime
-
+from PIL import Image
+from tqdm import tqdm
 # Each image is normalzied for better visualization
 def temperature2Png():
     DISASTER = 'coldwave'
@@ -333,10 +334,49 @@ def cyclone_upper_statistics():
     with open(os.path.join(OUTPUT_DATA_DIR, f'{DISASTER}-hourly_upper_records_stats.json'), 'w') as f:
         f.write(json.dumps(mean_std_dic))
 
+def pixelLabelDistribution(image):
+    # Count the number of pixels with value 0, 1, and 2
+    unique, counts = np.unique(image, return_counts=True)
+    pixel_counts = dict(zip(unique, counts))
+
+    # Extract the counts for pixel values 0, 1, and 2
+    count_0 = pixel_counts.get(0, 0)
+    count_1 = pixel_counts.get(1, 0)
+    count_2 = pixel_counts.get(-1, 0)
+    return count_0, count_1, count_2
+
 
 if __name__ == "__main__":
+    # DISASTER = 'hls_burn_scars'
+    # CURR_FOLDER_PATH = Path(__file__).parent
+    # OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'eo' / f'{DISASTER}' / 'training'
+    # cls0, cls1, cls2 = 0, 0, 0
+    # for root, _, files in os.walk(OUTPUT_DATA_DIR):
+    #     for file in tqdm(files):
+    #             filename = os.fsdecode(file)
+    #             if filename.endswith(".mask.tif"):
+    #                 img = np.array(Image.open(os.path.join(root, file)))
+    #                 count_0, count_1, count_2 = pixelLabelDistribution(img)
+    #                 cls0 += count_0
+    #                 cls1 += count_1
+    #                 cls2 += count_2
+    # print(f" Not burned: {cls0}, Burn scar: {cls1}, Missing data: {cls2}")
 
-    regionalDailyExtremeTemperature()
+    DISASTER = 'flood'
+    CURR_FOLDER_PATH = Path(__file__).parent
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH.parent / 'data' / 'eo' / f'{DISASTER}' / 'validation'
+    input_names, output_names = [], []
+    for root, _, files in os.walk(OUTPUT_DATA_DIR):
+        for file in tqdm(files):
+                filename = os.fsdecode(file)
+                if filename.endswith("_SAR.tif"):
+                    input_names.append(filename)
+                    output_names.append(filename[:-8]+'_GT.tif')
+    import csv
+    with open('validation_index.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        for item1, item2 in zip(input_names, output_names):
+            writer.writerow([item1, item2])
 
     """
     installation error 

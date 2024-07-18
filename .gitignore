@@ -165,3 +165,4 @@ data/
 *.png
 __init__.py
 *.out
+*.txt

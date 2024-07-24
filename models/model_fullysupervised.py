@@ -40,8 +40,9 @@ if __name__ == "__main__":
 
     # checkpoint = torch.load('/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
 
-    model_name = 'openmmlab/upernet-convnext-tiny'
-    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'upernet-convnext-tiny'
+    # model_name = 'openmmlab/upernet-convnext-tiny'
+    model_name = 'nvidia/mit-b0'
+    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'mit-b0'
     # model.load_state_dict(torch.load(SAVE_PATH / 'heatwave' / 'best_model_200.pth'))
 
     if args.disaster == "heatwave":
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import train, test
         # dataset
-        burned = MultiSpectralDataloader(batch_size=1,
+        burned = MultiSpectralDataloader(batch_size=8,
             num_workers=0,
             pin_memory=True,
             chip_size=512,
@@ -101,10 +102,10 @@ if __name__ == "__main__":
             persistent_workers=False,
             transform=None,
             disaster=args.disaster)
-        # train_loader = burned.train_dataloader()
-        # print(f"Training set has the length of {len(train_loader)}")
-        # val_loader = burned.val_dataloader()
-        # print(f"Validation set has the length of {len(val_loader)}")
+        train_loader = burned.train_dataloader()
+        print(f"Training set has the length of {len(train_loader)}")
+        val_loader = burned.val_dataloader()
+        print(f"Validation set has the length of {len(val_loader)}")
         if not os.path.exists(SAVE_PATH):
             os.mkdir(SAVE_PATH)
 
@@ -114,12 +115,12 @@ if __name__ == "__main__":
 
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min")
-        # best_model_state_dict, best_epoch = train(model, train_loader, val_loader, device, save_path=SAVE_PATH,
-        #                                num_epochs=100, optimizer=optimizer,
-        #                                    lr_scheduler=lr_scheduler, disaster=args.disaster)
-        best_epoch = 20
+        best_model_state_dict, best_epoch = train(model, train_loader, val_loader, device, save_path=SAVE_PATH,
+                                       num_epochs=100, optimizer=optimizer,
+                                           lr_scheduler=lr_scheduler, disaster=args.disaster)
+        # best_epoch = 20
         model_id = f'best_model_{best_epoch}'
-        best_model_state_dict = torch.load(SAVE_PATH / args.disaster / f"{model_id}.pth")
+        # best_model_state_dict = torch.load(SAVE_PATH / args.disaster / f"{model_id}.pth")
         msg = model.load_state_dict(best_model_state_dict)
         print(msg)
 
@@ -140,12 +141,12 @@ if __name__ == "__main__":
             persistent_workers=False,
             transform=None,
             disaster=args.disaster)
-        train_loader = flood.train_dataloader()
-        print(f"Training set has the length of {len(train_loader)}")
-        val_loader = flood.val_dataloader()
-        print(f"Validation set has the length of {len(val_loader)}")
-        if not os.path.exists(SAVE_PATH):
-            os.mkdir(SAVE_PATH)
+        # train_loader = flood.train_dataloader()
+        # print(f"Training set has the length of {len(train_loader)}")
+        # val_loader = flood.val_dataloader()
+        # print(f"Validation set has the length of {len(val_loader)}")
+        # if not os.path.exists(SAVE_PATH):
+        #     os.mkdir(SAVE_PATH)
 
         # define model
         model = BaselineNet(input_dim=8, output_dim=3, model_name=model_name)
@@ -153,12 +154,12 @@ if __name__ == "__main__":
 
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min")
-        best_model_state_dict, best_epoch = train(model, train_loader, val_loader, device, save_path=SAVE_PATH,
-                                       num_epochs=100, optimizer=optimizer,
-                                           lr_scheduler=lr_scheduler, disaster=args.disaster)
-        # best_epoch = 20
+        # best_model_state_dict, best_epoch = train(model, train_loader, val_loader, device, save_path=SAVE_PATH,
+        #                                num_epochs=100, optimizer=optimizer,
+        #                                    lr_scheduler=lr_scheduler, disaster=args.disaster)
+        best_epoch = 85
         model_id = f'best_model_{best_epoch}'
-        # best_model_state_dict = torch.load(SAVE_PATH / args.disaster / f"{model_id}.pth")
+        best_model_state_dict = torch.load(SAVE_PATH / args.disaster / f"{model_id}.pth")
         msg = model.load_state_dict(best_model_state_dict)
         print(msg)
 

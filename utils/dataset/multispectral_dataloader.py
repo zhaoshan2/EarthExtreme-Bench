@@ -14,7 +14,7 @@ class MultiSpectralDataloader():
             val_ratio: float=0.2,
             persistent_workers: bool =True,
             transform: str = None,
-            diaster: str="fire"
+            disaster: str = "fire"
     ):
         super().__init__()
         self.chip_size = chip_size
@@ -25,10 +25,10 @@ class MultiSpectralDataloader():
         self.persistent_workers = persistent_workers
         self.val_ratio = val_ratio
         self.transform = transform
-        self.diaster = diaster
+        self.disaster = disaster
 
     def train_dataloader(self):
-        data_train = MultispectralDataset(data_path=self.data_path, split="train", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.diaster)
+        data_train = MultispectralDataset(data_path=self.data_path, split="train", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.disaster)
 
         return DataLoader(
             dataset= data_train,
@@ -41,7 +41,7 @@ class MultiSpectralDataloader():
         )
 
     def val_dataloader(self):
-        data_val = MultispectralDataset(data_path=self.data_path, split="val", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.diaster)
+        data_val = MultispectralDataset(data_path=self.data_path, split="val", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.disaster)
 
         return DataLoader(
             dataset=data_val,
@@ -54,7 +54,7 @@ class MultiSpectralDataloader():
         )
 
     def test_dataloader(self):
-        data_test = MultispectralDataset(data_path=self.data_path, split="test", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.diaster)
+        data_test = MultispectralDataset(data_path=self.data_path, split="test", val_ratio = self.val_ratio, chip_size=self.chip_size, bands=None, transform=self.transform, disaster=self.disaster)
 
         return DataLoader(
             dataset=data_test,

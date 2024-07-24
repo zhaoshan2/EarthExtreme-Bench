@@ -175,25 +175,29 @@ class MultispectralDataset(BaseMultispectralDataset):
         mask = np.array(Image.fromarray(sample["mask"]))
 
         # CHW
-        sample["x"] = torch.tensor(image, dtype=torch.float32)
+        tensor_x= torch.tensor(image, dtype=torch.float32)
+        sample["x"] = torch.nan_to_num(tensor_x, nan=0.0)
+        # raise ValueError(f"Input tensor contains NaN values")
         # mask shape 1HW
         sample["y"] = torch.tensor(np.expand_dims(mask, 0), dtype=torch.float32)
         return sample
 
 if __name__ == '__main__':
-    dataset = BaseMultispectralDataset(data_path='/home/EarthExtreme-Bench/data/eo/flood', split="test", bands='rgb', transform=None, disaster="flood")
-    x = dataset[0]
+    dataset = MultispectralDataset(data_path='/home/EarthExtreme-Bench/data/eo/flood', split="train", bands=None,  chip_size=512, transform=None, disaster="flood")
+    x = dataset[1]
+    # print(x)
+
     img = x["x"]
     mas = x["y"]
 
-    plt.figure()
-    plt.imshow(score.tensor2uint(img))
-    plt.colorbar()
-    plt.title('sample')
-    plt.savefig('input.png')
-
-    plt.figure()
-    plt.imshow(x["y"][0])
-    plt.colorbar()
-    plt.title('mask')
-    plt.savefig('mask.png')
+    # plt.figure()
+    # plt.imshow(score.tensor2uint(img))
+    # plt.colorbar()
+    # plt.title('sample')
+    # plt.savefig('input.png')
+    #
+    # plt.figure()
+    # plt.imshow(x["y"][0])
+    # plt.colorbar()
+    # plt.title('mask')
+    # plt.savefig('mask.png')

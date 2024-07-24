@@ -166,3 +166,4 @@ data/
 __init__.py
 *.out
 *.txt
+*.npy

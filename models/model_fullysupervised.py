@@ -98,6 +98,8 @@ if __name__ == "__main__":
         # best_model_state_dict = torch.load(SAVE_PATH / args.disaster / f'{model_id}.pth')
         msg = model.load_state_dict(best_model_state_dict)
         print(msg)
+
+        print("testing")
         # testing
         test_loader, records = heatwave.test_dataloader()
         print("length of test loader", len(test_loader))
@@ -111,8 +113,7 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "fire":
-        from utils.dataset.multispectral_dataloader import \
-            MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset
@@ -168,8 +169,7 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "flood":
-        from utils.dataset.multispectral_dataloader import \
-            MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset

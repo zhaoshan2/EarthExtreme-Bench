@@ -1,13 +1,8 @@
 """
-Filter rainfall sequence with tag "downpour", "storm", or "hail"
-and generate the external link file for the new hdf5 files
+Find the 95 percentile threshold at each grid for four seasons using the 22 year historical data (1998-2019)
 """
-import pandas as pd
 import os
 from pathlib import Path
-import h5py
-from datetime import datetime
-import argparse
 from tqdm import tqdm
 import dask
 import xarray as xr

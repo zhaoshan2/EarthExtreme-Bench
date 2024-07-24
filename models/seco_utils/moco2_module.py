@@ -2,16 +2,19 @@ from argparse import ArgumentParser
 from itertools import chain
 
 import torch
-from torch import nn, optim
 import torch.nn.functional as F
 import torchvision
 from pytorch_lightning import LightningModule
+from torch import nn, optim
+
 # from pl_bolts.metrics import precision_at_k
 
 
 class MocoV2(LightningModule):
 
-    def __init__(self, base_encoder, emb_dim, num_negatives, emb_spaces=1, *args, **kwargs):
+    def __init__(
+        self, base_encoder, emb_dim, num_negatives, emb_spaces=1, *args, **kwargs
+    ):
         super().__init__()
         self.save_hyperparameters()
 
@@ -22,24 +25,42 @@ class MocoV2(LightningModule):
 
         # remove fc layer
         self.encoder_q = nn.Sequential(*list(self.encoder_q.children())[:-2])
-        self.encoder_k = nn.Sequential(*list(self.encoder_k.children())[:-1], nn.Flatten())
+        self.encoder_k = nn.Sequential(
+            *list(self.encoder_k.children())[:-1], nn.Flatten()
+        )
 
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
+        for param_q, param_k in zip(
+            self.encoder_q.parameters(), self.encoder_k.parameters()
+        ):
             param_k.data.copy_(param_q.data)  # initialize
             param_k.requires_grad = False  # not update by gradient
 
         # create the projection heads
-        self.mlp_dim = 512 * (1 if base_encoder in ['resnet18', 'resnet34'] else 4)
-        self.heads_q = nn.ModuleList([
-            nn.Sequential(nn.Linear(self.mlp_dim, self.mlp_dim), nn.ReLU(), nn.Linear(self.mlp_dim, emb_dim))
-            for _ in range(emb_spaces)
-        ])
-        self.heads_k = nn.ModuleList([
-            nn.Sequential(nn.Linear(self.mlp_dim, self.mlp_dim), nn.ReLU(), nn.Linear(self.mlp_dim, emb_dim))
-            for _ in range(emb_spaces)
-        ])
+        self.mlp_dim = 512 * (1 if base_encoder in ["resnet18", "resnet34"] else 4)
+        self.heads_q = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self.mlp_dim, self.mlp_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.mlp_dim, emb_dim),
+                )
+                for _ in range(emb_spaces)
+            ]
+        )
+        self.heads_k = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self.mlp_dim, self.mlp_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.mlp_dim, emb_dim),
+                )
+                for _ in range(emb_spaces)
+            ]
+        )
 
-        for param_q, param_k in zip(self.heads_q.parameters(), self.heads_k.parameters()):
+        for param_q, param_k in zip(
+            self.heads_q.parameters(), self.heads_k.parameters()
+        ):
             param_k.data.copy_(param_q.data)  # initialize
             param_k.requires_grad = False  # not update by gradient
 
@@ -54,12 +75,16 @@ class MocoV2(LightningModule):
         """
         Momentum update of the key encoder
         """
-        for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
+        for param_q, param_k in zip(
+            self.encoder_q.parameters(), self.encoder_k.parameters()
+        ):
             em = self.hparams.encoder_momentum
-            param_k.data = param_k.data * em + param_q.data * (1. - em)
-        for param_q, param_k in zip(self.heads_q.parameters(), self.heads_k.parameters()):
+            param_k.data = param_k.data * em + param_q.data * (1.0 - em)
+        for param_q, param_k in zip(
+            self.heads_q.parameters(), self.heads_k.parameters()
+        ):
             em = self.hparams.encoder_momentum
-            param_k.data = param_k.data * em + param_q.data * (1. - em)
+            param_k.data = param_k.data * em + param_q.data * (1.0 - em)
 
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys, queue_idx):
@@ -73,7 +98,7 @@ class MocoV2(LightningModule):
         assert self.hparams.num_negatives % batch_size == 0  # for simplicity
 
         # replace the keys at ptr (dequeue and enqueue)
-        self.queue[queue_idx, :, ptr:ptr + batch_size] = keys.T
+        self.queue[queue_idx, :, ptr : ptr + batch_size] = keys.T
         ptr = (ptr + batch_size) % self.hparams.num_negatives  # move pointer
 
         self.queue_ptr[queue_idx] = ptr
@@ -124,12 +149,20 @@ class MocoV2(LightningModule):
             z_pos = z_k[i]
             z_neg = self.queue[i].clone().detach()
             if i > 0:  # embedding space 0 is invariant to all augmentations
-                z_neg = torch.cat([z_neg, *[z_k[j].T for j in range(self.hparams.emb_spaces) if j != i]], dim=1)
+                z_neg = torch.cat(
+                    [
+                        z_neg,
+                        *[z_k[j].T for j in range(self.hparams.emb_spaces) if j != i],
+                    ],
+                    dim=1,
+                )
 
             # compute logits
             # Einstein sum is more intuitive
-            l_pos = torch.einsum('nc,nc->n', z_q, z_pos).unsqueeze(-1)  # positive logits: Nx1
-            l_neg = torch.einsum('nc,ck->nk', z_q, z_neg)  # negative logits: NxK
+            l_pos = torch.einsum("nc,nc->n", z_q, z_pos).unsqueeze(
+                -1
+            )  # positive logits: Nx1
+            l_neg = torch.einsum("nc,ck->nk", z_q, z_neg)  # negative logits: NxK
 
             l = torch.cat([l_pos, l_neg], dim=1)  # logits: Nx(1+K)
             l /= self.hparams.softmax_temperature  # apply temperature
@@ -158,33 +191,36 @@ class MocoV2(LightningModule):
             # accuracies.append(precision_at_k(out, target, top_k=(1,))[0])
         loss = torch.sum(torch.stack(losses))
 
-        log = {'train_loss': loss}
+        log = {"train_loss": loss}
         for i, acc in enumerate(accuracies):
-            log[f'train_acc/subspace{i}'] = acc
+            log[f"train_acc/subspace{i}"] = acc
 
         self.log_dict(log, on_step=True, on_epoch=False, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         params = chain(self.encoder_q.parameters(), self.heads_q.parameters())
-        optimizer = optim.SGD(params, self.hparams.learning_rate,
-                              momentum=self.hparams.momentum,
-                              weight_decay=self.hparams.weight_decay)
+        optimizer = optim.SGD(
+            params,
+            self.hparams.learning_rate,
+            momentum=self.hparams.momentum,
+            weight_decay=self.hparams.weight_decay,
+        )
         return optimizer
 
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--base_encoder', type=str, default='resnet18')
-        parser.add_argument('--emb_dim', type=int, default=128)
-        parser.add_argument('--num_workers', type=int, default=32)
-        parser.add_argument('--num_negatives', type=int, default=16384)
-        parser.add_argument('--encoder_momentum', type=float, default=0.999)
-        parser.add_argument('--softmax_temperature', type=float, default=0.07)
-        parser.add_argument('--learning_rate', type=float, default=0.03)
-        parser.add_argument('--momentum', type=float, default=0.9)
-        parser.add_argument('--weight_decay', type=float, default=1e-4)
-        parser.add_argument('--batch_size', type=int, default=256)
+        parser.add_argument("--base_encoder", type=str, default="resnet18")
+        parser.add_argument("--emb_dim", type=int, default=128)
+        parser.add_argument("--num_workers", type=int, default=32)
+        parser.add_argument("--num_negatives", type=int, default=16384)
+        parser.add_argument("--encoder_momentum", type=float, default=0.999)
+        parser.add_argument("--softmax_temperature", type=float, default=0.07)
+        parser.add_argument("--learning_rate", type=float, default=0.03)
+        parser.add_argument("--momentum", type=float, default=0.9)
+        parser.add_argument("--weight_decay", type=float, default=1e-4)
+        parser.add_argument("--batch_size", type=int, default=256)
         return parser
 
 
@@ -195,8 +231,9 @@ def concat_all_gather(tensor):
     Performs all_gather operation on the provided tensors.
     *** Warning ***: torch.distributed.all_gather has no gradient.
     """
-    tensors_gather = [torch.ones_like(tensor)
-                      for _ in range(torch.distributed.get_world_size())]
+    tensors_gather = [
+        torch.ones_like(tensor) for _ in range(torch.distributed.get_world_size())
+    ]
     torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
 
     output = torch.cat(tensors_gather, dim=0)

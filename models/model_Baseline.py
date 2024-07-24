@@ -1,10 +1,19 @@
 import torch
 import torch.nn as nn
+
 from utils.training_utils import get_activation, get_normalization
 
 
 class BaselineNet(nn.Module):
-    def __init__(self, *, input_dim=10, output_dim=1, activation="relu", norm="batch", padding="same"):
+    def __init__(
+        self,
+        *,
+        input_dim=10,
+        output_dim=1,
+        activation="relu",
+        norm="batch",
+        padding="same"
+    ):
         super(BaselineNet, self).__init__()
 
         self.output_dim = output_dim
@@ -50,7 +59,6 @@ class BaselineNet(nn.Module):
         return x
 
 
-
 if __name__ == "__main__":
     from torchinfo import summary
 
@@ -63,7 +71,7 @@ if __name__ == "__main__":
         input_dim=10,
         output_dim=1,
     )
-    
+
     model(torch.randn((BATCH_SIZE, CHANNELS, HEIGHT, WIDTH)))
 
     summary(

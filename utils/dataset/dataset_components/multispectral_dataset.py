@@ -1,15 +1,18 @@
 import os
+import sys
+from typing import Any, Dict, List, Optional, Tuple
+
 import matplotlib.pyplot as plt
-import torch
 import numpy as np
-from PIL import Image
 import pandas as pd
 import rasterio
-from typing import Any, Dict, List, Optional, Tuple
-import sys
-sys.path.insert(0, '/home/EarthExtreme-Bench')
-from utils import score
+import torch
+from PIL import Image
+
+sys.path.insert(0, "/home/EarthExtreme-Bench")
 import cv2
+
+from utils import score
 
 
 class BaseMultispectralDataset(torch.utils.data.Dataset):
@@ -22,7 +25,17 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
     6, SW 2, B12
     Further details in https://huggingface.co/datasets/ibm-nasa-geospatial/hls_burn_scars
     """
-    def __init__(self, data_path, split="train", val_ratio:float=0.1, bands:str=None, chip_size: int=256, transform=None, disaster="fire"):
+
+    def __init__(
+        self,
+        data_path,
+        split="train",
+        val_ratio: float = 0.1,
+        bands: str = None,
+        chip_size: int = 256,
+        transform=None,
+        disaster="fire",
+    ):
 
         assert split in {"train", "val", "test"}
         self.split = split
@@ -36,6 +49,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         self.val_ratio = val_ratio
 
         self.filenames = self._read_split()  # read train/valid/test splits
+
     def _normalization(self, image):
         if self.disaster == "fire":
             img_norm_cfg = dict(
@@ -55,7 +69,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                     0.08708738838140137,
                     0.07241979477437814,
                 ],
-             )
+            )
         elif self.disaster == "flood":
             img_norm_cfg = dict(
                 means=[
@@ -66,7 +80,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                     -14.57879175,
                     -8.6098158,
                     -14.29073382,
-                    -8.33534564
+                    -8.33534564,
                 ],
                 stds=[
                     0.16280619,
@@ -76,40 +90,39 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                     4.07141682,
                     3.94773216,
                     4.21006244,
-                    4.05494136
-                ],
-             )
-        else:
-            img_norm_cfg = dict(
-                means=[
-                    0.485,
-                    0.456,
-                    0.406
-                ],
-                stds=[
-                    0.229,
-                    0.224,
-                    0.225
+                    4.05494136,
                 ],
             )
-        means = np.array(img_norm_cfg['means'])
-        stds = np.array(img_norm_cfg['stds'])
-        image = (image - means[:, None, None]) /stds[:, None, None]
+        else:
+            img_norm_cfg = dict(
+                means=[0.485, 0.456, 0.406],
+                stds=[0.229, 0.224, 0.225],
+            )
+        means = np.array(img_norm_cfg["means"])
+        stds = np.array(img_norm_cfg["stds"])
+        image = (image - means[:, None, None]) / stds[:, None, None]
         return image
 
-
     def _transform(self, x: Dict):
-        if self.transform == 'resize':
-            image = x['image'] #CHW
-            mask = x['mask'] #HW
-            new_chips = np.zeros((image.shape[0], self.chip_size, self.chip_size), dtype=np.float32)
+        if self.transform == "resize":
+            image = x["image"]  # CHW
+            mask = x["mask"]  # HW
+            new_chips = np.zeros(
+                (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
+            )
             for i in range(image.shape[0]):
                 # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
-                new_slice = cv2.resize(image[i], (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST)
+                new_slice = cv2.resize(
+                    image[i],
+                    (self.chip_size, self.chip_size),
+                    interpolation=cv2.INTER_NEAREST,
+                )
                 new_chips[i, :, :] = new_slice
-            new_mask = cv2.resize(mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST)
-            x['image'] = new_chips
-            x['mask'] = new_mask
+            new_mask = cv2.resize(
+                mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
+            )
+            x["image"] = new_chips
+            x["mask"] = new_mask
         return x
 
     def __len__(self):
@@ -118,14 +131,20 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         filename = self.filenames[idx]
         if self.disaster == "fire":
-            image_path = os.path.join(self.data_path, self.folder, f"{filename}_merged.tif")
-            mask_path = os.path.join(self.data_path, self.folder, f"{filename}.mask.tif")
+            image_path = os.path.join(
+                self.data_path, self.folder, f"{filename}_merged.tif"
+            )
+            mask_path = os.path.join(
+                self.data_path, self.folder, f"{filename}.mask.tif"
+            )
         elif self.disaster == "flood":
-            image_path = os.path.join(self.data_path, self.folder, f"{filename}_SAR.tif")
+            image_path = os.path.join(
+                self.data_path, self.folder, f"{filename}_SAR.tif"
+            )
             mask_path = os.path.join(self.data_path, self.folder, f"{filename}_GT.tif")
         with rasterio.open(image_path) as dataset:
             if self.bands is None:
-                image = dataset.read() # CHW
+                image = dataset.read()  # CHW
                 image = self._normalization(image)
 
             elif self.bands == "rgb":
@@ -135,7 +154,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 # Stack the bands into a single array with shape (height, width, 3)
                 image = np.stack((red, green, blue), axis=-1)
 
-        mask = np.array(Image.open(mask_path)) # (512,512)
+        mask = np.array(Image.open(mask_path))  # (512,512)
 
         # convert missing data to nonfire
         mask[mask == -1] = 0
@@ -146,13 +165,17 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         return sample
 
     def _read_split(self):
-        split_filename = "validation_index.csv" if self.split == "test" else "training_index.csv"
-        split_filepath = os.path.join(self.data_path, f"{split_filename[:-10]}", split_filename)
+        split_filename = (
+            "validation_index.csv" if self.split == "test" else "training_index.csv"
+        )
+        split_filepath = os.path.join(
+            self.data_path, f"{split_filename[:-10]}", split_filename
+        )
         split_data = pd.read_csv(split_filepath)
         filenames = split_data.iloc[:, 0]
-        split = round(1/self.val_ratio)
+        split = round(1 / self.val_ratio)
 
-        perfex = -11 if self.disaster=="fire" else -8
+        perfex = -11 if self.disaster == "fire" else -8
         if self.split == "train":  # 90% for train
             filenames = [x[:perfex] for i, x in enumerate(filenames) if i % split != 0]
         elif self.split == "val":  # 10% for validation
@@ -175,15 +198,23 @@ class MultispectralDataset(BaseMultispectralDataset):
         mask = np.array(Image.fromarray(sample["mask"]))
 
         # CHW
-        tensor_x= torch.tensor(image, dtype=torch.float32)
+        tensor_x = torch.tensor(image, dtype=torch.float32)
         sample["x"] = torch.nan_to_num(tensor_x, nan=0.0)
         # raise ValueError(f"Input tensor contains NaN values")
         # mask shape 1HW
         sample["y"] = torch.tensor(np.expand_dims(mask, 0), dtype=torch.float32)
         return sample
 
-if __name__ == '__main__':
-    dataset = MultispectralDataset(data_path='/home/EarthExtreme-Bench/data/eo/flood', split="train", bands=None,  chip_size=512, transform=None, disaster="flood")
+
+if __name__ == "__main__":
+    dataset = MultispectralDataset(
+        data_path="/home/EarthExtreme-Bench/data/eo/flood",
+        split="train",
+        bands=None,
+        chip_size=512,
+        transform=None,
+        disaster="flood",
+    )
     x = dataset[1]
     # print(x)
 

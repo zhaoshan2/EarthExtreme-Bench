@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
-from utils.training_utils import get_activation, get_normalization, SE_Block
-from models.model_CoreCNN import CoreCNNBlock, CoreEncoderBlock, CoreAttentionBlock, CoreDecoderBlock
 from torchvision import transforms
 
+from models.model_CoreCNN import (CoreAttentionBlock, CoreCNNBlock,
+                                  CoreDecoderBlock, CoreEncoderBlock)
+from utils.training_utils import SE_Block, get_activation, get_normalization
 
 # class CoreDecoderBlock(nn.Module):
 #     def __init__(self, depth, in_channels, out_channels, *, norm="batch", activation="relu", padding="same"):
@@ -42,22 +43,27 @@ from torchvision import transforms
 #
 #         return x
 
+
 class ScaleSkip2D(nn.Module):
     def __init__(self, c):
         super(ScaleSkip2D, self).__init__()
         self.c = c
 
-        self.y_skipscale = nn.Parameter(torch.ones(1, self.c, 1, 1)) # use as loss-punishment
+        self.y_skipscale = nn.Parameter(
+            torch.ones(1, self.c, 1, 1)
+        )  # use as loss-punishment
         self.y_skipbias = nn.Parameter(torch.zeros(1, self.c, 1, 1))
 
-    def forward(self, y): # y is the skip-connect
+    def forward(self, y):  # y is the skip-connect
         # clip negative values to zero
         y = self.y_skipscale * y + self.y_skipbias
         return y
 
 
 class CoreVAE(nn.Module):
-    def __init__(self, *,
+    def __init__(
+        self,
+        *,
         input_dim=10,
         output_dim=10,
         depths=None,
@@ -78,11 +84,18 @@ class CoreVAE(nn.Module):
 
         self.dims = [v // 2 for v in self.dims]
 
-        assert len(self.depths) == len(self.dims), "depths and dims must have the same length."
+        assert len(self.depths) == len(
+            self.dims
+        ), "depths and dims must have the same length."
 
         self.stem = nn.Sequential(
-            CoreCNNBlock(self.input_dim, self.dims[0], norm=self.norm, activation=self.activation,
-                         padding=self.padding),
+            CoreCNNBlock(
+                self.input_dim,
+                self.dims[0],
+                norm=self.norm,
+                activation=self.activation,
+                padding=self.padding,
+            ),
         )
 
         self.encoder_blocks = []
@@ -115,7 +128,9 @@ class CoreVAE(nn.Module):
         self.decoder_blocks = nn.ModuleList(self.decoder_blocks)
 
         self.scale_skips = []
-        self.scale_skip_weights = [(i+1)/len(self.dims) for i in range(len(self.dims))]
+        self.scale_skip_weights = [
+            (i + 1) / len(self.dims) for i in range(len(self.dims))
+        ]
         for i in reversed(range(len(self.encoder_blocks))):
             scale_skip = ScaleSkip2D(c=self.dims[i])
             self.scale_skips.append(scale_skip)
@@ -123,12 +138,23 @@ class CoreVAE(nn.Module):
         self.scale_skips = nn.ModuleList(self.scale_skips)
 
         self.bridge = nn.Sequential(
-            CoreCNNBlock(self.dims[-1], self.dims[-1], norm=self.norm, activation=self.activation,
-                         padding=self.padding),
+            CoreCNNBlock(
+                self.dims[-1],
+                self.dims[-1],
+                norm=self.norm,
+                activation=self.activation,
+                padding=self.padding,
+            ),
         )
 
         self.head = nn.Sequential(
-            CoreCNNBlock(self.dims[0], self.dims[0], norm=self.norm, activation=self.activation, padding=self.padding),
+            CoreCNNBlock(
+                self.dims[0],
+                self.dims[0],
+                norm=self.norm,
+                activation=self.activation,
+                padding=self.padding,
+            ),
             nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0),
         )
 
@@ -170,9 +196,16 @@ class CoreVAE(nn.Module):
             skip = self.scale_skips[i](skip)
             x = block(x, skip)
 
-            scale_skip_loss.append(self.scale_skips[i].y_skipscale.abs().mean() * self.scale_skip_weights[i])
+            scale_skip_loss.append(
+                self.scale_skips[i].y_skipscale.abs().mean()
+                * self.scale_skip_weights[i]
+            )
 
-        return x, (out_coords, out_time, out_kg), sum(scale_skip_loss)/len(scale_skip_loss)
+        return (
+            x,
+            (out_coords, out_time, out_kg),
+            sum(scale_skip_loss) / len(scale_skip_loss),
+        )
 
     def forward(self, x):
 
@@ -219,4 +252,4 @@ if __name__ == "__main__":
     )
 
     sd = model.state_dict()
-    torch.save(sd, 'test.pt')
+    torch.save(sd, "test.pt")

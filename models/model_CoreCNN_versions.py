@@ -1,4 +1,4 @@
-from models.model_CoreCNN import CoreUnet, CoreEncoder
+from models.model_CoreCNN import CoreEncoder, CoreUnet
 
 
 def CoreUnet_atto(**kwargs):
@@ -16,6 +16,7 @@ def CoreUnet_atto(**kwargs):
     model = CoreUnet(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
     return model
 
+
 def CoreUnet_femto(**kwargs):
     """
     Total params: 5,684,477
@@ -30,6 +31,7 @@ def CoreUnet_femto(**kwargs):
     """
     model = CoreUnet(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
     return model
+
 
 def CoreUnet_pico(**kwargs):
     """
@@ -46,6 +48,7 @@ def CoreUnet_pico(**kwargs):
     model = CoreUnet(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
     return model
 
+
 def CoreUnet_nano(**kwargs):
     """
     Total params: 16,400,685
@@ -58,8 +61,11 @@ def CoreUnet_nano(**kwargs):
     Params size (MB): 65.60
     Estimated Total Size (MB): 3459.42
     """
-    model = CoreUnet(depths=[2, 2, 8, 2], dims=[80*2, 160*2, 320*2, 640*2], **kwargs)
+    model = CoreUnet(
+        depths=[2, 2, 8, 2], dims=[80 * 2, 160 * 2, 320 * 2, 640 * 2], **kwargs
+    )
     return model
+
 
 def CoreUnet_tiny(**kwargs):
     """
@@ -76,6 +82,7 @@ def CoreUnet_tiny(**kwargs):
     model = CoreUnet(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     return model
 
+
 def CoreUnet_base(**kwargs):
     """
     Total params: 61,429,957
@@ -90,6 +97,7 @@ def CoreUnet_base(**kwargs):
     """
     model = CoreUnet(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     return model
+
 
 def CoreUnet_large(**kwargs):
     """
@@ -106,6 +114,7 @@ def CoreUnet_large(**kwargs):
     model = CoreUnet(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     return model
 
+
 def CoreUnet_huge(**kwargs):
     """
     Total params: 463,234,997
@@ -120,6 +129,7 @@ def CoreUnet_huge(**kwargs):
     """
     model = CoreUnet(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
+
 
 def Core_atto(**kwargs):
     """
@@ -136,6 +146,7 @@ def Core_atto(**kwargs):
     model = CoreEncoder(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
     return model
 
+
 def Core_femto(**kwargs):
     """
     Total params: 5,523,169
@@ -150,6 +161,7 @@ def Core_femto(**kwargs):
     """
     model = CoreEncoder(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
     return model
+
 
 def Core_pico(**kwargs):
     """
@@ -166,6 +178,7 @@ def Core_pico(**kwargs):
     model = CoreEncoder(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
     return model
 
+
 def Core_nano(**kwargs):
     """
     Total params: 17,379,041
@@ -180,6 +193,7 @@ def Core_nano(**kwargs):
     """
     model = CoreEncoder(depths=[2, 2, 8, 2], dims=[80, 160, 320, 640], **kwargs)
     return model
+
 
 def Core_tiny(**kwargs):
     """
@@ -196,6 +210,7 @@ def Core_tiny(**kwargs):
     model = CoreEncoder(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     return model
 
+
 def Core_base(**kwargs):
     """
     Total params: 106,486,529
@@ -211,6 +226,7 @@ def Core_base(**kwargs):
     model = CoreEncoder(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     return model
 
+
 def Core_large(**kwargs):
     """
     Total params: 239,343,745
@@ -225,6 +241,7 @@ def Core_large(**kwargs):
     """
     model = CoreEncoder(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     return model
+
 
 def Core_huge(**kwargs):
     """
@@ -242,7 +259,7 @@ def Core_huge(**kwargs):
     return model
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from torchinfo import summary
 
     BATCH_SIZE = 4

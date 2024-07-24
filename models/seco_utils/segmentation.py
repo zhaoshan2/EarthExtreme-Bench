@@ -15,7 +15,9 @@ def get_segmentation_model(backbone, feature_indices, feature_channels):
         [type]: [description]
     """
     model = SegmentationEncoder(backbone, feature_indices, feature_channels, diff=True)
-    unet = UNet(model, feature_channels, 1, bilinear=True, concat_mult=1, dropout_rate=0.3)
+    unet = UNet(
+        model, feature_channels, 1, bilinear=True, concat_mult=1, dropout_rate=0.3
+    )
     # unet = UNetSmall(model, feature_channels, 1, bilinear=True, concat_mult=1)
     return unet
 
@@ -79,7 +81,7 @@ class DoubleConv(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
@@ -92,8 +94,7 @@ class Down(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels)
+            nn.MaxPool2d(2), DoubleConv(in_channels, out_channels)
         )
 
     def forward(self, x):
@@ -108,10 +109,12 @@ class Up(nn.Module):
 
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
         else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+            self.up = nn.ConvTranspose2d(
+                in_channels, in_channels // 2, kernel_size=2, stride=2
+            )
             self.conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, x1, x2):
@@ -120,8 +123,7 @@ class Up(nn.Module):
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
 
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
         # if you have padding issues, see
         # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
         # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
@@ -163,7 +165,15 @@ class OutConv(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, encoder, feature_channels, n_classes, concat_mult=2, bilinear=True, dropout_rate=0.5):
+    def __init__(
+        self,
+        encoder,
+        feature_channels,
+        n_classes,
+        concat_mult=2,
+        bilinear=True,
+        dropout_rate=0.5,
+    ):
         """Simple segmentation network
 
         Args:
@@ -184,13 +194,34 @@ class UNet(nn.Module):
                 in_ch = feature_channels[i + 1] * concat_mult
             else:
                 in_ch = feature_channels[i + 1] * concat_mult
-            setattr(self, 'shrink%d' % i,
-                    nn.Conv2d(in_ch, feature_channels[i] * concat_mult, kernel_size=3, stride=1, padding=1))
-            setattr(self, 'shrink2%d' % i,
-                    nn.Conv2d(feature_channels[i] * concat_mult * 2, feature_channels[i] * concat_mult, kernel_size=3,
-                              stride=1, padding=1, bias=False))
-            setattr(self, 'batchnorm%d' % i,
-                    nn.BatchNorm2d(feature_channels[i] * concat_mult))
+            setattr(
+                self,
+                "shrink%d" % i,
+                nn.Conv2d(
+                    in_ch,
+                    feature_channels[i] * concat_mult,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                ),
+            )
+            setattr(
+                self,
+                "shrink2%d" % i,
+                nn.Conv2d(
+                    feature_channels[i] * concat_mult * 2,
+                    feature_channels[i] * concat_mult,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    bias=False,
+                ),
+            )
+            setattr(
+                self,
+                "batchnorm%d" % i,
+                nn.BatchNorm2d(feature_channels[i] * concat_mult),
+            )
         self.outc = OutConv(feature_channels[0] * concat_mult, n_classes)
         self.encoder = encoder
 
@@ -198,7 +229,7 @@ class UNet(nn.Module):
         features = self.encoder(in_x)
         x = features.reshape((in_x.shape[0], self.feature_channels[-2], -1))
         for i in range(len(features) - 2, -1, -1):
-            conv = getattr(self, 'shrink%d' % i)
+            conv = getattr(self, "shrink%d" % i)
             x = F.upsample_nearest(x, scale_factor=2)
             x = conv(x)
             if features[i].shape[-1] != x.shape[-1]:
@@ -206,9 +237,9 @@ class UNet(nn.Module):
             else:
                 x2 = features[i]
             x = torch.cat([x, x2], 1)
-            conv2 = getattr(self, 'shrink2%d' % i)
+            conv2 = getattr(self, "shrink2%d" % i)
             x = conv2(x)
-            bn = getattr(self, 'batchnorm%d' % i)
+            bn = getattr(self, "batchnorm%d" % i)
             x = bn(x)
             x = F.relu(x)
             x = self.dropout(x)
@@ -218,7 +249,9 @@ class UNet(nn.Module):
 
 
 class UNetSmall(nn.Module):
-    def __init__(self, encoder, feature_channels, n_classes, concat_mult=2, bilinear=True):
+    def __init__(
+        self, encoder, feature_channels, n_classes, concat_mult=2, bilinear=True
+    ):
         """Simple segmentation network
 
         Args:
@@ -234,11 +267,26 @@ class UNetSmall(nn.Module):
         factor = 2 if bilinear else 1
         self.feature_channels = feature_channels
         for i in range(0, len(feature_channels)):
-            setattr(self, 'shrink%d' % i,
-                    nn.Conv2d(feature_channels[i], feature_channels[0], kernel_size=1, stride=1, padding=0))
+            setattr(
+                self,
+                "shrink%d" % i,
+                nn.Conv2d(
+                    feature_channels[i],
+                    feature_channels[0],
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                ),
+            )
 
-        self.aggregate = nn.Conv2d(len(feature_channels) * feature_channels[0], feature_channels[0], kernel_size=3,
-                                   stride=1, padding=1, bias=False)
+        self.aggregate = nn.Conv2d(
+            len(feature_channels) * feature_channels[0],
+            feature_channels[0],
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(feature_channels[0])
         self.outc = OutConv(feature_channels[0], n_classes)
         self.encoder = encoder
@@ -249,7 +297,7 @@ class UNetSmall(nn.Module):
         features = features[1:]
         ret = []
         for i in range(len(features)):
-            conv = getattr(self, 'shrink%d' % i)
+            conv = getattr(self, "shrink%d" % i)
             x = conv(features[i])
             ratio = h // features[i].shape[-2]
             ret.append(F.upsample_bilinear(x, scale_factor=ratio))

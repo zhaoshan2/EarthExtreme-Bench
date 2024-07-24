@@ -1,12 +1,26 @@
+import sys
+
 import torch
 import torch.nn as nn
-import sys
-sys.path.insert(0,'/home/code/EarthExtreme-Bench')
-from utils.training_utils import get_activation, get_normalization, SE_Block
+
+sys.path.insert(0, "/home/code/EarthExtreme-Bench")
 # from models.model_CoreCNN import CoreCNNBlock
 from model_CoreCNN import CoreCNNBlock
+
+from utils.training_utils import SE_Block, get_activation, get_normalization
+
+
 class DecoderBlock(nn.Module):
-    def __init__(self, depth, in_channels, out_channels, *, norm="batch", activation="relu", padding="same"):
+    def __init__(
+        self,
+        depth,
+        in_channels,
+        out_channels,
+        *,
+        norm="batch",
+        activation="relu",
+        padding="same",
+    ):
         super(DecoderBlock, self).__init__()
 
         self.depth = depth
@@ -18,14 +32,23 @@ class DecoderBlock(nn.Module):
         self.padding = padding
 
         self.upsample = nn.UpsamplingBilinear2d(scale_factor=2)
-        self.match_channels = CoreCNNBlock(self.in_channels, self.out_channels, norm=self.norm,
-                                           activation=self.activation_blocks, padding=self.padding)
-        
+        self.match_channels = CoreCNNBlock(
+            self.in_channels,
+            self.out_channels,
+            norm=self.norm,
+            activation=self.activation_blocks,
+            padding=self.padding,
+        )
 
         self.blocks = []
         for _ in range(self.depth):
-            block = CoreCNNBlock(self.out_channels, self.out_channels, norm=self.norm,
-                                 activation=self.activation_blocks, padding=self.padding)
+            block = CoreCNNBlock(
+                self.out_channels,
+                self.out_channels,
+                norm=self.norm,
+                activation=self.activation_blocks,
+                padding=self.padding,
+            )
             self.blocks.append(block)
 
         self.blocks = nn.Sequential(*self.blocks)
@@ -38,9 +61,18 @@ class DecoderBlock(nn.Module):
             x = self.blocks[i](x)
 
         return x
-    
+
+
 class EncoderBlock(nn.Module):
-    def __init__(self, depth, in_channels, out_channels, norm="batch", activation="relu", padding="same"):
+    def __init__(
+        self,
+        depth,
+        in_channels,
+        out_channels,
+        norm="batch",
+        activation="relu",
+        padding="same",
+    ):
         super(EncoderBlock, self).__init__()
 
         self.depth = depth
@@ -53,8 +85,13 @@ class EncoderBlock(nn.Module):
         self.blocks = []
         for i in range(self.depth):
             _in_channels = self.in_channels if i == 0 else self.out_channels
-            block = CoreCNNBlock(_in_channels, self.out_channels, norm=self.norm, activation=self.activation,
-                                 padding=self.padding)
+            block = CoreCNNBlock(
+                _in_channels,
+                self.out_channels,
+                norm=self.norm,
+                activation=self.activation,
+                padding=self.padding,
+            )
 
             self.blocks.append(block)
 
@@ -69,8 +106,11 @@ class EncoderBlock(nn.Module):
 
         return x
 
+
 class CoreDecoder(nn.Module):
-    def __init__(self, *,
+    def __init__(
+        self,
+        *,
         embedding_dim=10,
         output_dim=1,
         depths=None,
@@ -90,7 +130,9 @@ class CoreDecoder(nn.Module):
         self.padding = padding
         self.decoder_blocks = []
 
-        assert len(self.depths) == len(self.dims), "depths and dims must have the same length."
+        assert len(self.depths) == len(
+            self.dims
+        ), "depths and dims must have the same length."
 
         for i in reversed(range(len(self.depths))):
             decoder_block = DecoderBlock(
@@ -108,12 +150,23 @@ class CoreDecoder(nn.Module):
         self.decoder_downsample_block = nn.Identity()
 
         self.decoder_bridge = nn.Sequential(
-            CoreCNNBlock(embedding_dim, self.dims[-1], norm=norm, activation=activation,
-                         padding=padding),
+            CoreCNNBlock(
+                embedding_dim,
+                self.dims[-1],
+                norm=norm,
+                activation=activation,
+                padding=padding,
+            ),
         )
 
         self.decoder_head = nn.Sequential(
-            CoreCNNBlock(self.dims[0], self.dims[0], norm=norm, activation=activation, padding=padding),
+            CoreCNNBlock(
+                self.dims[0],
+                self.dims[0],
+                norm=norm,
+                activation=activation,
+                padding=padding,
+            ),
             nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0),
         )
 

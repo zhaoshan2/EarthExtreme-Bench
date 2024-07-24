@@ -1,8 +1,10 @@
 import math
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 # import buteo as beo
 
 
@@ -21,8 +23,12 @@ class TiledMSE(nn.Module):
         y_true = (y_true + 1) * self.scale_term
         y_pred = (y_pred + 1) * self.scale_term
 
-        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
+        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (
+            y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3]
+        )
+        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (
+            y_true.shape[1] * y_true.shape[2] * y_true.shape[3]
+        )
 
         sum_mse = torch.mean((y_pred_sum - y_true_sum) ** 2, dim=1).mean()
         mse = torch.mean((y_pred - y_true) ** 2, dim=1).mean()
@@ -45,11 +51,20 @@ class TiledMAPE(nn.Module):
         self.eps = 1e-6
 
     def forward(self, y_pred, y_true):
-        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
+        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (
+            y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3]
+        )
+        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (
+            y_true.shape[1] * y_true.shape[2] * y_true.shape[3]
+        )
 
-        mape_sum = torch.mean(torch.abs((y_true_sum - y_pred_sum) / (y_true_sum + self.eps + self.beta)), dim=1).mean()
-        mape = torch.mean(torch.abs((y_true - y_pred) / (y_true + self.eps + self.beta)), dim=1).mean()
+        mape_sum = torch.mean(
+            torch.abs((y_true_sum - y_pred_sum) / (y_true_sum + self.eps + self.beta)),
+            dim=1,
+        ).mean()
+        mape = torch.mean(
+            torch.abs((y_true - y_pred) / (y_true + self.eps + self.beta)), dim=1
+        ).mean()
 
         weighted = (mape_sum * (1 - self.bias)) + (mape * self.bias)
 
@@ -70,13 +85,21 @@ class TiledMAPE2(nn.Module):
 
     def forward(self, y_pred, y_true):
         eps = torch.Tensor([self.eps]).to(y_pred.device)
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
+        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (
+            y_true.shape[1] * y_true.shape[2] * y_true.shape[3]
+        )
 
         abs_diff = torch.abs(y_true - y_pred)
-        abs_diff_sum = torch.sum(abs_diff, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
+        abs_diff_sum = torch.sum(abs_diff, dim=(2, 3)) / (
+            y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3]
+        )
 
-        wape = torch.mean(abs_diff_sum / torch.maximum(y_true_sum + self.beta, eps), dim=1).mean()
-        mape = torch.mean(abs_diff / torch.maximum(y_true + self.beta, eps), dim=1).mean()
+        wape = torch.mean(
+            abs_diff_sum / torch.maximum(y_true_sum + self.beta, eps), dim=1
+        ).mean()
+        mape = torch.mean(
+            abs_diff / torch.maximum(y_true + self.beta, eps), dim=1
+        ).mean()
 
         weighted = (wape * (1 - self.bias)) + (mape * self.bias)
 
@@ -112,9 +135,9 @@ class DropPath(nn.Module):
 
 
 class LayerNorm(nn.Module):
-    """ LayerNorm that supports two data formats: channels_last (default) or channels_first. 
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
+    """LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with
+    shape (batch_size, height, width, channels) while channels_first corresponds to inputs
     with shape (batch_size, channels, height, width).
     """
 
@@ -131,7 +154,9 @@ class LayerNorm(nn.Module):
 
     def forward(self, x):
         if self.data_format == "channels_last":
-            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+            return F.layer_norm(
+                x, self.normalized_shape, self.weight, self.bias, self.eps
+            )
 
         elif self.data_format == "channels_first":
             u = x.mean(1, keepdim=True)
@@ -143,7 +168,7 @@ class LayerNorm(nn.Module):
 
 
 class GRN(nn.Module):
-    """ GRN (Global Response Normalization) layer """
+    """GRN (Global Response Normalization) layer"""
 
     def __init__(self, dim, channel_first=False):
         super().__init__()
@@ -166,8 +191,14 @@ class GRN(nn.Module):
         return self.gamma * (x * Nx) + self.beta + x
 
 
-def cosine_scheduler(base_value, final_value, epochs, warmup_epochs=0,
-                     start_warmup_value=0, warmup_steps=-1):
+def cosine_scheduler(
+    base_value,
+    final_value,
+    epochs,
+    warmup_epochs=0,
+    start_warmup_value=0,
+    warmup_steps=-1,
+):
     warmup_schedule = np.array([])
     warmup_iters = warmup_epochs
     if warmup_steps > 0:
@@ -178,7 +209,14 @@ def cosine_scheduler(base_value, final_value, epochs, warmup_epochs=0,
 
     iters = np.arange(epochs - warmup_iters)
     schedule = np.array(
-        [final_value + 0.5 * (base_value - final_value) * (1 + math.cos(math.pi * i / (len(iters)))) for i in iters])
+        [
+            final_value
+            + 0.5
+            * (base_value - final_value)
+            * (1 + math.cos(math.pi * i / (len(iters))))
+            for i in iters
+        ]
+    )
 
     schedule = np.concatenate((warmup_schedule, schedule))
 
@@ -198,7 +236,7 @@ class SE_Block(nn.Module):
             nn.Linear(channels, channels // self.reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(channels // self.reduction, channels, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -221,12 +259,18 @@ class SE_BlockV2(nn.Module):
 
         self.fc_spatial = nn.Sequential(
             nn.AdaptiveAvgPool2d(8),
-            nn.Conv2d(channels, channels, kernel_size=2, stride=2, groups=channels, bias=False),
+            nn.Conv2d(
+                channels, channels, kernel_size=2, stride=2, groups=channels, bias=False
+            ),
             nn.BatchNorm2d(channels),
         )
 
-        self.fc_reduction = nn.Linear(in_features=channels * (4 * 4), out_features=channels // self.reduction)
-        self.fc_extention = nn.Linear(in_features=channels // self.reduction, out_features=channels)
+        self.fc_reduction = nn.Linear(
+            in_features=channels * (4 * 4), out_features=channels // self.reduction
+        )
+        self.fc_extention = nn.Linear(
+            in_features=channels // self.reduction, out_features=channels
+        )
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -244,9 +288,17 @@ class SE_BlockV2(nn.Module):
 
 
 class SE_BlockV3(nn.Module):
-    """ Squeeze and Excitation block with spatial and channel attention. """
+    """Squeeze and Excitation block with spatial and channel attention."""
 
-    def __init__(self, channels, reduction_c=2, reduction_s=8, activation="relu", norm="batch", first_layer=False):
+    def __init__(
+        self,
+        channels,
+        reduction_c=2,
+        reduction_s=8,
+        activation="relu",
+        norm="batch",
+        first_layer=False,
+    ):
         super(SE_BlockV3, self).__init__()
 
         self.channels = channels
@@ -256,13 +308,23 @@ class SE_BlockV3(nn.Module):
         self.activation = get_activation(activation)
 
         self.fc_pool = nn.AdaptiveAvgPool2d(reduction_s)
-        self.fc_conv = nn.Conv2d(self.channels, self.channels, kernel_size=2, stride=2, groups=self.channels,
-                                 bias=False)
+        self.fc_conv = nn.Conv2d(
+            self.channels,
+            self.channels,
+            kernel_size=2,
+            stride=2,
+            groups=self.channels,
+            bias=False,
+        )
         self.fc_norm = get_normalization(norm, self.channels)
 
-        self.linear1 = nn.Linear(in_features=self.channels * (reduction_s // 2 * reduction_s // 2),
-                                 out_features=self.channels // self.reduction_c)
-        self.linear2 = nn.Linear(in_features=self.channels // self.reduction_c, out_features=self.channels)
+        self.linear1 = nn.Linear(
+            in_features=self.channels * (reduction_s // 2 * reduction_s // 2),
+            out_features=self.channels // self.reduction_c,
+        )
+        self.linear2 = nn.Linear(
+            in_features=self.channels // self.reduction_c, out_features=self.channels
+        )
 
         self.activation_output = nn.Softmax(dim=1) if first_layer else nn.Sigmoid()
 
@@ -330,7 +392,8 @@ def get_activation(activation_name):
         return activation_name
     else:
         raise ValueError(
-            f"activation must be one of leaky_relu, prelu, selu, gelu, sigmoid, tanh, relu. Got: {activation_name}")
+            f"activation must be one of leaky_relu, prelu, selu, gelu, sigmoid, tanh, relu. Got: {activation_name}"
+        )
 
 
 def get_normalization(normalization_name, num_channels, num_groups=32, dims=2):
@@ -356,23 +419,22 @@ def get_normalization(normalization_name, num_channels, num_groups=32, dims=2):
     elif normalization_name == "bcn":
         if dims == 1:
             return nn.Sequential(
-                nn.BatchNorm1d(num_channels),
-                nn.GroupNorm(1, num_channels)
+                nn.BatchNorm1d(num_channels), nn.GroupNorm(1, num_channels)
             )
         elif dims == 2:
             return nn.Sequential(
-                nn.BatchNorm2d(num_channels),
-                nn.GroupNorm(1, num_channels)
+                nn.BatchNorm2d(num_channels), nn.GroupNorm(1, num_channels)
             )
         elif dims == 3:
             return nn.Sequential(
-                nn.BatchNorm3d(num_channels),
-                nn.GroupNorm(1, num_channels)
+                nn.BatchNorm3d(num_channels), nn.GroupNorm(1, num_channels)
             )
     elif normalization_name == "none":
         return nn.Identity()
     else:
-        raise ValueError(f"normalization must be one of batch, instance, layer, group, none. Got: {normalization_name}")
+        raise ValueError(
+            f"normalization must be one of batch, instance, layer, group, none. Got: {normalization_name}"
+        )
 
 
 def convert_torch_to_float(tensor):
@@ -407,8 +469,7 @@ def read_yaml(path):
     return AttrDict(params)
 
 
-from typing import Union, List, Tuple, Optional
-
+from typing import List, Optional, Tuple, Union
 
 # class MultiArray_1D(beo.MultiArray):
 #     def __init__(self,

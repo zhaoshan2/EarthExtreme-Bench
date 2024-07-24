@@ -1,15 +1,18 @@
 """
 Find the 95 percentile threshold at each grid for four seasons using the 22 year historical data (1998-2019)
 """
+
+import gc
 import os
 from pathlib import Path
-from tqdm import tqdm
+
 import dask
 import xarray as xr
-import gc
+from tqdm import tqdm
+
 CURR_FOLDER_PATH = Path(__file__).parent
-DATA_FOLDER_PATH = CURR_FOLDER_PATH.parent.parent / 'data_storage_home'
-DISASTER = 'precipitation'
+DATA_FOLDER_PATH = CURR_FOLDER_PATH.parent.parent / "data_storage_home"
+DISASTER = "precipitation"
 
 
 def open_dataset(filepath):
@@ -18,6 +21,8 @@ def open_dataset(filepath):
     except Exception as e:
         print(f"Error opening {filepath}: {e}")
         return None
+
+
 if __name__ == "__main__":
     """
     To do:
@@ -84,18 +89,18 @@ if __name__ == "__main__":
     # print("All files saved successfully")
     ## Combine yearly data into a single file
 
-
     """
     Stage 3
     """
     import numpy as np
     import scipy.stats as st
-    trmm = xr.open_dataset('trmm_combined.nc')
-    lat = trmm.variables['lat'][:] #纬度 20
-    lon = trmm.variables['lon'][:] #经度 72
-    time = trmm['time'][:]
-    pcp = trmm.variables['precipitation']
-    pcp = pcp.transpose('time','lat', 'lon') # switch the dim (lon, lat) to (lat, lon)
+
+    trmm = xr.open_dataset(DATA_FOLDER_PATH / "trmm/data_coarsen/trmm_5deg_combined.nc")
+    lat = trmm.variables["lat"][:]  # 纬度 20
+    lon = trmm.variables["lon"][:]  # 经度 72
+    time = trmm["time"][:]
+    pcp = trmm.variables["precipitation"]
+    pcp = pcp.transpose("time", "lat", "lon")  # switch the dim (lon, lat) to (lat, lon)
     print("dims of precipitation variable:", pcp.dims)
     t = time.shape[0]
     la = lat.shape[0]
@@ -103,7 +108,7 @@ if __name__ == "__main__":
     n = la * lo
 
     y = 22
-    index_seasons = np.zeros((4, 22), dtype='object')
+    index_seasons = np.zeros((4, 22), dtype="object")
     index_seasons[0, 0] = np.arange(0, 59, 1)
     index_seasons[1, 0] = np.arange(59, 151, 1)
     index_seasons[2, 0] = np.arange(151, 243, 1)
@@ -114,18 +119,25 @@ if __name__ == "__main__":
         index_seasons[2, i + 1] = np.arange(516 + 365 * i, 608 + 365 * i, 1)
         index_seasons[3, i + 1] = np.arange(608 + 365 * i, 699 + 365 * i, 1)
 
-    index_season = np.zeros((4), dtype='object')
-    index_season[0] = np.arange(0, 59, 1) # winter
-    index_season[1] = np.arange(59, 151, 1) # spring
-    index_season[2] = np.arange(151, 243, 1) # summer
-    index_season[3] = np.arange(243, 334, 1) # fall
+    index_season = np.zeros((4), dtype="object")
+    index_season[0] = np.arange(0, 59, 1)  # winter
+    index_season[1] = np.arange(59, 151, 1)  # spring
+    index_season[2] = np.arange(151, 243, 1)  # summer
+    index_season[3] = np.arange(243, 334, 1)  # fall
 
     for i in range(0, y - 1):
-        index_season[0] = np.concatenate((index_season[0], np.arange(334 + 365 * i, 424 + 365 * i, 1)))
-        index_season[1] = np.concatenate((index_season[1], np.arange(424 + 365 * i, 516 + 365 * i, 1)))
-        index_season[2] = np.concatenate((index_season[2], np.arange(516 + 365 * i, 608 + 365 * i, 1)))
-        index_season[3] = np.concatenate((index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1)))
-
+        index_season[0] = np.concatenate(
+            (index_season[0], np.arange(334 + 365 * i, 424 + 365 * i, 1))
+        )
+        index_season[1] = np.concatenate(
+            (index_season[1], np.arange(424 + 365 * i, 516 + 365 * i, 1))
+        )
+        index_season[2] = np.concatenate(
+            (index_season[2], np.arange(516 + 365 * i, 608 + 365 * i, 1))
+        )
+        index_season[3] = np.concatenate(
+            (index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1))
+        )
 
     def ec_wd(ts, perc):
         th = st.scoreatpercentile(ts[ts > 1], perc)
@@ -134,13 +146,12 @@ if __name__ == "__main__":
         else:
             return 0
 
-
     # for perc in xrange(80, 100):
     perc = 95
-    for j in [0,1,2,3]:
-        mnoe = index_season[j].shape[0] * (1 - perc / 100.)
+    for j in [0, 1, 2, 3]:
+        mnoe = index_season[j].shape[0] * (1 - perc / 100.0)
         print(mnoe)
-        th = np.zeros((la,lo))
+        th = np.zeros((la, lo))
         for l in range(la):
             rain = np.zeros((t, lo))
             precip = pcp[index_season[j], l, :]
@@ -150,4 +161,6 @@ if __name__ == "__main__":
                 rain[index_season[j], :] = pcp[index_season[j], l, :]
             for k in range(lo):
                 th[l, k] = ec_wd(rain[:, k], perc)
-        np.save('trmm7_global_wd_score_cor_seasonal_rain_perc%d_season%d' % (perc, j), th)
+        np.save(
+            "trmm7_global_wd_score_cor_seasonal_rain_perc%d_season%d" % (perc, j), th
+        )

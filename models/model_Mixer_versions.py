@@ -1,5 +1,7 @@
 import torch
+
 from models.model_Mixer import Mixer
+
 
 def Mixer_atto(**kwargs):
     """
@@ -12,9 +14,12 @@ def Mixer_atto(**kwargs):
     Forward/backward pass size (MB): 646.45
     Params size (MB): 14.64
     Estimated Total Size (MB): 663.71
-    """    
-    model = Mixer(embedding_dims=[32] * 4, patch_sizes=[16, 8, 4, 2], expansion=1, **kwargs)
+    """
+    model = Mixer(
+        embedding_dims=[32] * 4, patch_sizes=[16, 8, 4, 2], expansion=1, **kwargs
+    )
     return model
+
 
 def Mixer_femto(**kwargs):
     """
@@ -28,8 +33,11 @@ def Mixer_femto(**kwargs):
     Params size (MB): 22.11
     Estimated Total Size (MB): 1442.93
     """
-    model = Mixer(embedding_dims=[64] * 4, patch_sizes=[16, 8, 4, 2], expansion=1.5, **kwargs)
+    model = Mixer(
+        embedding_dims=[64] * 4, patch_sizes=[16, 8, 4, 2], expansion=1.5, **kwargs
+    )
     return model
+
 
 def Mixer_pico(**kwargs):
     """
@@ -43,8 +51,14 @@ def Mixer_pico(**kwargs):
     Params size (MB): 37.12
     Estimated Total Size (MB): 9234.18
     """
-    model = Mixer(embedding_dims=[128] * 7, patch_sizes=[16, 8, 4, 2, 16, 8, 4], expansion=2.0, **kwargs)
+    model = Mixer(
+        embedding_dims=[128] * 7,
+        patch_sizes=[16, 8, 4, 2, 16, 8, 4],
+        expansion=2.0,
+        **kwargs
+    )
     return model
+
 
 def Mixer_nano(**kwargs):
     """
@@ -58,8 +72,14 @@ def Mixer_nano(**kwargs):
     Params size (MB): 63.62
     Estimated Total Size (MB): 10267.31
     """
-    model = Mixer(embedding_dims=[128] * 4 * 2, patch_sizes=[16, 8, 4, 2] * 2, expansion=2.0, **kwargs)
+    model = Mixer(
+        embedding_dims=[128] * 4 * 2,
+        patch_sizes=[16, 8, 4, 2] * 2,
+        expansion=2.0,
+        **kwargs
+    )
     return model
+
 
 def Mixer_tiny(**kwargs):
     """
@@ -73,8 +93,14 @@ def Mixer_tiny(**kwargs):
     Params size (MB): 102.84
     Estimated Total Size (MB): 14875.50
     """
-    model = Mixer(embedding_dims=[128] * 4 * 3, patch_sizes=[16, 8, 4, 2] * 3, expansion=2.2, **kwargs)
+    model = Mixer(
+        embedding_dims=[128] * 4 * 3,
+        patch_sizes=[16, 8, 4, 2] * 3,
+        expansion=2.2,
+        **kwargs
+    )
     return model
+
 
 def Mixer_base(**kwargs):
     """
@@ -87,9 +113,15 @@ def Mixer_base(**kwargs):
     Forward/backward pass size (MB): 26307.20
     Params size (MB): 244.58
     Estimated Total Size (MB): 26554.40
-    """    
-    model = Mixer(embedding_dims=[128] * 4 * 4, patch_sizes=[16, 8, 4, 2] * 4, expansion=4, **kwargs)
+    """
+    model = Mixer(
+        embedding_dims=[128] * 4 * 4,
+        patch_sizes=[16, 8, 4, 2] * 4,
+        expansion=4,
+        **kwargs
+    )
     return model
+
 
 def Mixer_large(**kwargs):
     """
@@ -103,11 +135,17 @@ def Mixer_large(**kwargs):
     Params size (MB): 485.89
     Estimated Total Size (MB): 50954.90
     """
-    model = Mixer(embedding_dims=[128] * 4 * 8, patch_sizes=[16, 8, 4, 2] * 8, expansion=4, **kwargs)
+    model = Mixer(
+        embedding_dims=[128] * 4 * 8,
+        patch_sizes=[16, 8, 4, 2] * 8,
+        expansion=4,
+        **kwargs
+    )
     return model
 
+
 def Mixer_huge(**kwargs):
-    """ 
+    """
     Total params: 453,284,609
     Trainable params: 453,284,609
     Non-trainable params: 0
@@ -118,7 +156,12 @@ def Mixer_huge(**kwargs):
     Params size (MB): 1812.94
     Estimated Total Size (MB): 173077.91
     """
-    model = Mixer(embedding_dims=[128] * 4 * 24, patch_sizes=[16, 8, 4, 2] * 24, expansion=5, **kwargs)
+    model = Mixer(
+        embedding_dims=[128] * 4 * 24,
+        patch_sizes=[16, 8, 4, 2] * 24,
+        expansion=5,
+        **kwargs
+    )
     return model
 
 

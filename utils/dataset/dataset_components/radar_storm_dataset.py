@@ -1,16 +1,36 @@
+from datetime import timedelta
+
 import h5py
 import numpy as np
 import pandas as pd
-from datetime import timedelta
 import torch
+
+
 class HDFIterator:
-    def __init__(self, data: h5py.File, metadata: pd.DataFrame, mask, in_seq_length=1, out_seq_length=1,
-                 batch_size=4, stride=1, shuffle=True,
-                 filter_threshold=0, sort_by="id", ascending=True, return_mask=True, run_size=25,
-                 scan_max_value=52.5, return_type=np.float32):
+    def __init__(
+        self,
+        data: h5py.File,
+        metadata: pd.DataFrame,
+        mask,
+        in_seq_length=1,
+        out_seq_length=1,
+        batch_size=4,
+        stride=1,
+        shuffle=True,
+        filter_threshold=0,
+        sort_by="id",
+        ascending=True,
+        return_mask=True,
+        run_size=25,
+        scan_max_value=52.5,
+        return_type=np.float32,
+    ):
         self.data = data
-        self.metadata = metadata.sample(frac=1) if shuffle \
-                                                else metadata.sort_values(by=sort_by, ascending=ascending)
+        self.metadata = (
+            metadata.sample(frac=1)
+            if shuffle
+            else metadata.sort_values(by=sort_by, ascending=ascending)
+        )
         self.run_idx = 0
         self.run_seq_idx = 0
         self.batch_size = batch_size
@@ -42,13 +62,26 @@ class HDFIterator:
 
         while self.run_idx < len(self.metadata) and len(seqs) < self.batch_size:
 
-            run_datetime = pd.to_datetime(self.metadata.iloc[self.run_idx]['start_datetime'])
+            run_datetime = pd.to_datetime(
+                self.metadata.iloc[self.run_idx]["start_datetime"]
+            )
 
-            while self.run_seq_idx < (self.current_run.shape[0] - self.run_size + 1) and len(seqs) < self.batch_size:
-                frames = np.clip(self.current_run[self.run_seq_idx:self.run_seq_idx + self.run_size]
-                                 / self.scan_max_value, 0, 1)
+            while (
+                self.run_seq_idx < (self.current_run.shape[0] - self.run_size + 1)
+                and len(seqs) < self.batch_size
+            ):
+                frames = np.clip(
+                    self.current_run[
+                        self.run_seq_idx : self.run_seq_idx + self.run_size
+                    ]
+                    / self.scan_max_value,
+                    0,
+                    1,
+                )
                 seqs.append(frames)
-                datetime_seqs.append(run_datetime+timedelta(minutes=5*self.run_seq_idx))
+                datetime_seqs.append(
+                    run_datetime + timedelta(minutes=5 * self.run_seq_idx)
+                )
 
                 self.run_seq_idx += self.stride
 
@@ -67,9 +100,13 @@ class HDFIterator:
         if self.outlier_mask is None:
             # return retval, datetime_seqs
             sample = {
-                "x": torch.from_numpy(retval[:self.in_seq_length, ...].astype(self.return_type)),
-                "y": torch.from_numpy(retval[-self.out_seq_length:, ...].astype(self.return_type)),
-                "datetime_seqs": datetime_seqs
+                "x": torch.from_numpy(
+                    retval[: self.in_seq_length, ...].astype(self.return_type)
+                ),
+                "y": torch.from_numpy(
+                    retval[-self.out_seq_length :, ...].astype(self.return_type)
+                ),
+                "datetime_seqs": datetime_seqs,
             }
 
         else:
@@ -78,10 +115,16 @@ class HDFIterator:
             # x: in_seq_length, B, 1, h, w -> 5, B, 1, 480, 480
             # datetime_seq: List of length 1, e.g., [Timestamp('2018-10-29 14:50:00')] the starting time
             sample = {
-                "x": torch.from_numpy(retval[:self.in_seq_length, ...].astype(self.return_type)),
-                "y": torch.from_numpy(retval[-self.out_seq_length:,...].astype(self.return_type)),
-                "mask": torch.from_numpy(masks[-self.out_seq_length:, ...].astype(self.return_type)),
-                "datetime_seqs": datetime_seqs
+                "x": torch.from_numpy(
+                    retval[: self.in_seq_length, ...].astype(self.return_type)
+                ),
+                "y": torch.from_numpy(
+                    retval[-self.out_seq_length :, ...].astype(self.return_type)
+                ),
+                "mask": torch.from_numpy(
+                    masks[-self.out_seq_length :, ...].astype(self.return_type)
+                ),
+                "datetime_seqs": datetime_seqs,
             }
         return sample
 
@@ -96,11 +139,13 @@ class HDFIterator:
         print(metadata)
         return np.stack([img_slice for img_slice in self.data[str(metadata.name)][:]])
 
+
 def infinite_batcher(data: h5py.File, metadata: pd.DataFrame, mask, **kwargs):
     while True:
         gen = HDFIterator(data, metadata, mask, **kwargs)
         for sample in gen:
             yield sample
+
 
 if __name__ == "__main__":
     pass

@@ -10,11 +10,11 @@ class ScaleSkip2D(nn.Module):
 
         self.y_skipscale = nn.Parameter(torch.ones(1, self.channels, 1, 1))
         self.y_skipbias = nn.Parameter(torch.zeros(1, self.channels, 1, 1))
-        
+
         self.x_skipscale = nn.Parameter(torch.ones(1, self.channels, 1, 1))
         self.x_skipbias = nn.Parameter(torch.zeros(1, self.channels, 1, 1))
 
-        if drop_p > 0.:
+        if drop_p > 0.0:
             self.dropout = nn.Dropout2d(drop_p)
         else:
             self.dropout = None
@@ -26,7 +26,7 @@ class ScaleSkip2D(nn.Module):
 
         y = self.y_skipscale * y + self.y_skipbias
         x = self.x_skipscale * x + self.x_skipbias
-        
+
         return x + y
 
 
@@ -41,20 +41,26 @@ class CNNBlock(nn.Module):
         self.norm2 = nn.BatchNorm2d(out_channels)
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, 1, padding=0, bias=False)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1, groups=out_channels, bias=False)
-        self.conv3 = nn.Conv2d(out_channels, out_channels, 3, padding=1, groups=1, bias=False)
+        self.conv2 = nn.Conv2d(
+            out_channels, out_channels, 3, padding=1, groups=out_channels, bias=False
+        )
+        self.conv3 = nn.Conv2d(
+            out_channels, out_channels, 3, padding=1, groups=1, bias=False
+        )
 
         self.activation = nn.ReLU()
 
         if in_channels != out_channels:
-            self.match_channels = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0, bias=False)
+            self.match_channels = nn.Conv2d(
+                in_channels, out_channels, kernel_size=1, padding=0, bias=False
+            )
             self.match_norm = nn.BatchNorm2d(out_channels)
         else:
             self.match_channels = None
 
     def forward(self, x):
         identity = x
-        
+
         x = self.conv1(x)
         x = self.norm1(x)
         x = self.activation(x)
@@ -78,7 +84,8 @@ class CNNBlock(nn.Module):
 
 
 class MLPMixerLayer(nn.Module):
-    def __init__(self,
+    def __init__(
+        self,
         embed_dims,
         patch_size=16,
         chw=(10, 64, 64),
@@ -97,29 +104,28 @@ class MLPMixerLayer(nn.Module):
         self.tokens = round((self.chw[1] * self.chw[2]) / self.num_patches)
 
         self.bn1 = nn.BatchNorm2d(self.num_patches)
-        self.mix_channel = nn.Sequential( # B, P, T, C
+        self.mix_channel = nn.Sequential(  # B, P, T, C
             nn.Linear(self.embed_dims, int(self.embed_dims * self.expansion)),
             nn.ReLU6(),
-            nn.Dropout(drop_n) if drop_n > 0. else nn.Identity(),
+            nn.Dropout(drop_n) if drop_n > 0.0 else nn.Identity(),
             nn.Linear(int(self.embed_dims * self.expansion), self.embed_dims),
         )
 
         self.bn2 = nn.BatchNorm2d(self.num_patches)
-        self.mix_patch = nn.Sequential( # B, C, T, P
+        self.mix_patch = nn.Sequential(  # B, C, T, P
             nn.Linear(self.num_patches, int(self.num_patches * self.expansion)),
             nn.ReLU6(),
-            nn.Dropout(drop_n) if drop_n > 0. else nn.Identity(),
+            nn.Dropout(drop_n) if drop_n > 0.0 else nn.Identity(),
             nn.Linear(int(self.num_patches * self.expansion), self.num_patches),
         )
 
         self.bn3 = nn.BatchNorm2d(self.num_patches)
-        self.mix_token = nn.Sequential( # B, P, C, T
+        self.mix_token = nn.Sequential(  # B, P, C, T
             nn.Linear(self.tokens, int(self.tokens * self.expansion)),
             nn.ReLU6(),
-            nn.Dropout(drop_n) if drop_n > 0. else nn.Identity(),
+            nn.Dropout(drop_n) if drop_n > 0.0 else nn.Identity(),
             nn.Linear(int(self.tokens * self.expansion), self.tokens),
         )
-
 
     def patchify_batch(self, tensor):
         B, C, _H, _W = tensor.shape
@@ -129,12 +135,13 @@ class MLPMixerLayer(nn.Module):
         num_patches = self.num_patches
 
         # Reshape and extract patches
-        reshaped = tensor.reshape(B, C, num_patches_height, patch_size, num_patches_width, patch_size)
+        reshaped = tensor.reshape(
+            B, C, num_patches_height, patch_size, num_patches_width, patch_size
+        )
         transposed = reshaped.permute(0, 2, 4, 1, 3, 5)
-        final_patches = transposed.reshape(B, num_patches, C, patch_size ** 2)
+        final_patches = transposed.reshape(B, num_patches, C, patch_size**2)
 
         return final_patches
-
 
     def unpatchify_batch(self, patches):
         B, _P, C, _T = patches.shape
@@ -144,38 +151,41 @@ class MLPMixerLayer(nn.Module):
         num_patches_width = self.num_patches_width
 
         # Reverse the patchify process
-        reshaped = patches.reshape(B, num_patches_height, num_patches_width, C, patch_size, patch_size)
+        reshaped = patches.reshape(
+            B, num_patches_height, num_patches_width, C, patch_size, patch_size
+        )
         transposed = reshaped.permute(0, 3, 1, 4, 2, 5)
         final_tensor = transposed.reshape(B, C, H, W)
 
         return final_tensor
 
     def forward(self, x):
-        x = self.patchify_batch(x) # B, P, C, T
+        x = self.patchify_batch(x)  # B, P, C, T
 
         x = self.bn1(x)
-        mix_channel = x.permute(0, 1, 3, 2) # B, P, T, C
+        mix_channel = x.permute(0, 1, 3, 2)  # B, P, T, C
         mix_channel = self.mix_channel(mix_channel)
-        mix_channel = mix_channel.permute(0, 1, 3, 2) # B, P, C, T 
+        mix_channel = mix_channel.permute(0, 1, 3, 2)  # B, P, C, T
         x = x + mix_channel
 
         x = self.bn2(x)
-        mix_patch = x.permute(0, 2, 3, 1) # B, C, T, P
+        mix_patch = x.permute(0, 2, 3, 1)  # B, C, T, P
         mix_patch = self.mix_patch(mix_patch)
-        mix_patch = mix_patch.permute(0, 3, 1, 2) # B, P, C, T
+        mix_patch = mix_patch.permute(0, 3, 1, 2)  # B, P, C, T
         x = x + mix_patch
 
         x = self.bn3(x)
         mix_token = self.mix_token(x)
         x = x + mix_token
 
-        x = self.unpatchify_batch(x) # B, C, H, W
+        x = self.unpatchify_batch(x)  # B, C, H, W
 
         return x
 
 
 class Mixer(nn.Module):
-    def __init__(self,
+    def __init__(
+        self,
         chw,
         output_dim,
         embedding_dims=[64, 64, 64, 64],
@@ -193,13 +203,15 @@ class Mixer(nn.Module):
         self.expansion = expansion
         self.drop_n = drop_n
         self.drop_p = drop_p
-        self.std = .02
+        self.std = 0.02
         self.softmax_output = softmax_output
         self.class_boundary = max(patch_sizes)
 
         assert isinstance(self.embedding_dims, list), "embedding_dims must be a list."
         assert isinstance(self.patch_sizes, list), "patch_sizes must be a list."
-        assert len(self.embedding_dims) == len(self.patch_sizes), "embedding_dims and patch_sizes must be the same length."
+        assert len(self.embedding_dims) == len(
+            self.patch_sizes
+        ), "embedding_dims and patch_sizes must be the same length."
 
         self.stem = nn.Sequential(
             CNNBlock(chw[0], self.embedding_dims[0], apply_residual=False),
@@ -207,16 +219,26 @@ class Mixer(nn.Module):
             CNNBlock(self.embedding_dims[0], self.embedding_dims[0]),
         )
 
-        self.chw_2 = (self.embedding_dims[0], self.chw[1] + self.class_boundary, self.chw[2])
+        self.chw_2 = (
+            self.embedding_dims[0],
+            self.chw[1] + self.class_boundary,
+            self.chw[2],
+        )
 
         self.mixer_layers = []
         self.matcher_layers = []
         self.skip_layers = []
         self.skip_layers_2 = []
         for i, v in enumerate(patch_sizes):
-            if self.embedding_dims[i] != self.embedding_dims[i - 1] and i < len(patch_sizes) - 1 and i != 0:
+            if (
+                self.embedding_dims[i] != self.embedding_dims[i - 1]
+                and i < len(patch_sizes) - 1
+                and i != 0
+            ):
                 self.matcher_layers.append(
-                    nn.Conv2d(self.embedding_dims[i - 1], self.embedding_dims[i], 1, padding=0)
+                    nn.Conv2d(
+                        self.embedding_dims[i - 1], self.embedding_dims[i], 1, padding=0
+                    )
                 )
             else:
                 self.matcher_layers.append(nn.Identity())
@@ -238,7 +260,9 @@ class Mixer(nn.Module):
                 )
                 if self.embedding_dims[i] != self.embedding_dims[0]:
                     self.skip_layers_2.append(
-                        nn.Conv2d(self.embedding_dims[0], self.embedding_dims[i], 1, padding=0)
+                        nn.Conv2d(
+                            self.embedding_dims[0], self.embedding_dims[i], 1, padding=0
+                        )
                     )
                 else:
                     self.skip_layers_2.append(nn.Identity())
@@ -274,7 +298,9 @@ class Mixer(nn.Module):
 
     def forward_body(self, identity):
         skip = self.stem(identity)
-        skip = torch.nn.functional.pad(skip, (0, 0, self.class_boundary, 0), mode="constant", value=0.0)
+        skip = torch.nn.functional.pad(
+            skip, (0, 0, self.class_boundary, 0), mode="constant", value=0.0
+        )
 
         x = skip
 
@@ -288,7 +314,7 @@ class Mixer(nn.Module):
             else:
                 x = layer(x)
 
-        x = x[:, :, self.class_boundary:, :]
+        x = x[:, :, self.class_boundary :, :]
 
         return x
 
@@ -300,6 +326,7 @@ class Mixer(nn.Module):
             x = torch.softmax(x, dim=1)
 
         return x
+
 
 if __name__ == "__main__":
     from torchinfo import summary

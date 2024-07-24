@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta
+
 import numpy as np
 import xarray as xr
-from datetime import datetime, timedelta
+
 
 def latlon2xy(lat: xr.DataArray, lon: xr.DataArray) -> tuple[np.array, np.array]:
     """
@@ -13,7 +15,9 @@ def latlon2xy(lat: xr.DataArray, lon: xr.DataArray) -> tuple[np.array, np.array]
 
 def crop_mask(mask: np.array, lat: xr.DataArray, lon: xr.DataArray) -> np.array:
     x, y = latlon2xy(lat, lon)
-    mask_cropped = mask[int(np.min(x)):int(np.max(x)), int(np.min(y)):int(np.max(y))]
+    mask_cropped = mask[
+        int(np.min(x)) : int(np.max(x)), int(np.min(y)) : int(np.max(y))
+    ]
     return mask_cropped.astype(np.float32)
 
 
@@ -32,7 +36,7 @@ def months_within_date_range(start_date, end_date):
     current_date = start_date
 
     while current_date <= end_date:
-        months_list.append(current_date.strftime('%Y%m'))
+        months_list.append(current_date.strftime("%Y%m"))
         # Move to the next month
         month = current_date.month
         year = current_date.year
@@ -54,7 +58,7 @@ def days_within_date_range(start_date, end_date):
     days_list = []
 
     while current_date <= end_date:
-        days_list.append(current_date.strftime('%Y%m%d'))
+        days_list.append(current_date.strftime("%Y%m%d"))
         current_date += timedelta(days=1)
 
     return days_list

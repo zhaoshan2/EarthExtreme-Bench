@@ -1,6 +1,7 @@
 """
 This file holds pipeline components useful for loading remote sensing images and annotations.
 """
+
 import os.path as osp
 
 import numpy as np
@@ -46,7 +47,6 @@ class ConstantMultiply(object):
 
 @PIPELINES.register_module()
 class BandsExtract(object):
-
     """Extract bands from image. Assumes channels last
 
     It extracts bands from an image. Assumes channels last.
@@ -76,7 +76,6 @@ class BandsExtract(object):
 
 @PIPELINES.register_module()
 class TorchRandomCrop(object):
-
     """
 
     It randomly crops a multichannel tensor.

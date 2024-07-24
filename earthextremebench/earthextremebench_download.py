@@ -1,13 +1,15 @@
 import os
+import zipfile
+from pathlib import Path
+
+from huggingface_hub import HfApi, hf_hub_download
+from tqdm import tqdm
 
 # os.environ["EE_BENCH_DIR"] = "/home/EarthExtreme-Bench/data/zip-test"
 
-from pathlib import Path
-from huggingface_hub import HfApi, hf_hub_download
-from tqdm import tqdm
-import zipfile
 
 # from earthextremebench import EE_BENCH_DIRR
+
 
 def decompress_zip_with_progress(zip_file_path, extract_to_folder=None):
     """Decompress a zip file with a progress bar and remove the symlink."""
@@ -19,7 +21,9 @@ def decompress_zip_with_progress(zip_file_path, extract_to_folder=None):
         total_files = len(file_names)
 
         # Initialize the progress bar with the total number of files
-        with tqdm(total=total_files, unit="file", desc=f"Extracting {zip_file_path.name}") as pbar:
+        with tqdm(
+            total=total_files, unit="file", desc=f"Extracting {zip_file_path.name}"
+        ) as pbar:
             for file in file_names:
                 # Extract each file
                 zip_ref.extract(file, extract_to_folder)

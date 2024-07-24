@@ -1,36 +1,47 @@
+import sys
+from collections import OrderedDict
 from functools import partial
 
+import timm
 import torch
 import torch.nn as nn
 # from models.model_DecoderUtils import CoreDecoder, EncoderBlock
 from model_DecoderUtils import CoreDecoder, EncoderBlock
+from timm.models.vision_transformer import Block, PatchEmbed
 
-from timm.models.vision_transformer import PatchEmbed, Block
-import timm
-from collections import OrderedDict
-import sys
-sys.path.insert(0, '/home/EarthExtreme-Bench')
+sys.path.insert(0, "/home/EarthExtreme-Bench")
 # from einops import rearrange
 from utils.Prithvi_100M_config import data_mean, data_std
+from utils.transformer_utils import (get_1d_sincos_pos_embed_from_grid,
+                                     get_2d_sincos_pos_embed)
 
-from utils.transformer_utils import get_2d_sincos_pos_embed, get_1d_sincos_pos_embed_from_grid
 # from models.model_CoreCNN import CoreCNNBlock, get_activation
 
+
 class ViTGroupedChannelsEncoder(nn.Module):
-    """ 
-        VisionTransformer backbone
+    """
+    VisionTransformer backbone
     """
 
-    def __init__(self, img_size=96, patch_size=8, in_chans=10, output_dim=1,
-                 channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
-                 # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
-                 # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
-                 channel_embed=256, embed_dim=1024, depth=24, num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm
-                 ):
-        
+    def __init__(
+        self,
+        img_size=96,
+        patch_size=8,
+        in_chans=10,
+        output_dim=1,
+        channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
+        # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
+        # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
+        channel_embed=256,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+    ):
+
         super().__init__()
-        
+
         # Attributes
         self.in_c = in_chans
         self.patch_size = patch_size
@@ -40,40 +51,56 @@ class ViTGroupedChannelsEncoder(nn.Module):
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
-        self.patch_embed = nn.ModuleList([PatchEmbed(img_size, patch_size, len(group), embed_dim)
-                                          for group in channel_groups])
+        self.patch_embed = nn.ModuleList(
+            [
+                PatchEmbed(img_size, patch_size, len(group), embed_dim)
+                for group in channel_groups
+            ]
+        )
         # self.patch_embed = PatchEmbed(img_size, patch_size, 1, embed_dim)
         self.num_patches = self.patch_embed[0].num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim), requires_grad=True)
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + 1, embed_dim - channel_embed),
-                                      requires_grad=False)  # fixed sin-cos embedding
-        self.channel_embed = nn.Parameter(torch.zeros(1, num_groups, channel_embed), requires_grad=False)
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, self.num_patches + 1, embed_dim - channel_embed),
+            requires_grad=False,
+        )  # fixed sin-cos embedding
+        self.channel_embed = nn.Parameter(
+            torch.zeros(1, num_groups, channel_embed), requires_grad=False
+        )
         # self.enc_mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
-        self.blocks = nn.ModuleList([
-            Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                Block(
+                    embed_dim,
+                    num_heads,
+                    mlp_ratio,
+                    qkv_bias=True,
+                    norm_layer=norm_layer,
+                )
+                for i in range(depth)
+            ]
+        )
         self.norm = norm_layer(embed_dim)
 
-        
         self.initialize_weights()
         # --------------------------------------------------------------------------
 
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.num_patches ** .5),
-                                            cls_token=True)
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1], int(self.num_patches**0.5), cls_token=True
+        )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embed[0].proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=.02)
+        torch.nn.init.normal_(self.cls_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -105,13 +132,17 @@ class ViTGroupedChannelsEncoder(nn.Module):
         pos_embed = self.pos_embed[:, 1:, :].unsqueeze(1)  # (1, 1, L, pD)
 
         # Channel embed same across (x,y) position, and pos embed same across channel (c)
-        channel_embed = channel_embed.expand(-1, -1, pos_embed.shape[2], -1)  # (1, G, L, cD)
-        pos_embed = pos_embed.expand(-1, channel_embed.shape[1], -1, -1)  # (1, G, L, pD)
+        channel_embed = channel_embed.expand(
+            -1, -1, pos_embed.shape[2], -1
+        )  # (1, G, L, cD)
+        pos_embed = pos_embed.expand(
+            -1, channel_embed.shape[1], -1, -1
+        )  # (1, G, L, pD)
         pos_channel = torch.cat((pos_embed, channel_embed), dim=-1)  # (1, G, L, D)
 
         # add pos embed w/o cls token
         x = x + pos_channel  # (N, G, L, D)
-        x = x.view(b, -1, D) # (N, L, D)
+        x = x.view(b, -1, D)  # (N, L, D)
 
         # append cls token
         cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
@@ -129,18 +160,30 @@ class ViTGroupedChannelsEncoder(nn.Module):
 
 
 class SatMAE(nn.Module):
-    """ Masked Autoencoder with VisionTransformer backbone
-    """
+    """Masked Autoencoder with VisionTransformer backbone"""
 
-    def __init__(self, img_size=96, patch_size=8, in_chans=10, output_dim=1,
-                 channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
-                 # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
-                 # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
-                 channel_embed=256, embed_dim=1024, depth=24, num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
-                 decoder_norm='batch', decoder_padding='same',
-                 decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280]
-                 ):
+    def __init__(
+        self,
+        img_size=96,
+        patch_size=8,
+        in_chans=10,
+        output_dim=1,
+        channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
+        # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
+        # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
+        channel_embed=256,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+        norm_pix_loss=False,
+        decoder_norm="batch",
+        decoder_padding="same",
+        decoder_activation="relu",
+        decoder_depths=[2, 2, 8, 2],
+        decoder_dims=[160, 320, 640, 1280],
+    ):
         super().__init__()
 
         self.in_c = in_chans
@@ -151,48 +194,65 @@ class SatMAE(nn.Module):
 
         # --------------------------------------------------------------------------
         # encoder specifics
-        self.vit_encoder = ViTGroupedChannelsEncoder(img_size=img_size, patch_size=patch_size, 
-                                                     in_chans=in_chans, output_dim=output_dim,
-                                                     channel_groups=channel_groups,
-                                                     channel_embed=channel_embed, embed_dim=embed_dim, depth=depth, num_heads=num_heads,
-                                                     mlp_ratio=mlp_ratio, norm_layer=norm_layer,)
- 
-        # --------------------------------------------------------------------------
+        self.vit_encoder = ViTGroupedChannelsEncoder(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            output_dim=output_dim,
+            channel_groups=channel_groups,
+            channel_embed=channel_embed,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            mlp_ratio=mlp_ratio,
+            norm_layer=norm_layer,
+        )
 
         # --------------------------------------------------------------------------
 
+        # --------------------------------------------------------------------------
 
         # CNN Decoder Blocks:
         self.depths = decoder_depths
         self.dims = decoder_dims
 
-        self.decoder_head = CoreDecoder(embedding_dim=embed_dim*3,
-                                        output_dim=output_dim,
-                                        depths=decoder_depths, 
-                                        dims= decoder_dims,
-                                        activation=decoder_activation,
-                                        padding=decoder_padding, 
-                                        norm=decoder_norm)
+        self.decoder_head = CoreDecoder(
+            embedding_dim=embed_dim * 3,
+            output_dim=output_dim,
+            depths=decoder_depths,
+            dims=decoder_dims,
+            activation=decoder_activation,
+            padding=decoder_padding,
+            norm=decoder_norm,
+        )
 
-
-        self.decoder_downsample_block = nn.Sequential(EncoderBlock(depth=1, in_channels=embed_dim*3,
-                                                                   out_channels=embed_dim*3, norm=decoder_norm, activation=decoder_activation,
-                                                                   padding=decoder_padding))
-
-
-
+        self.decoder_downsample_block = nn.Sequential(
+            EncoderBlock(
+                depth=1,
+                in_channels=embed_dim * 3,
+                out_channels=embed_dim * 3,
+                norm=decoder_norm,
+                activation=decoder_activation,
+                padding=decoder_padding,
+            )
+        )
 
     def reshape(self, x):
         # Separate channel axis
         N, GL, D = x.shape
         G = len(self.channel_groups)
-        x = x.view(N, G, GL//G, D)
+        x = x.view(N, G, GL // G, D)
 
         # predictor projection
         x_c_patch = []
         for i, group in enumerate(self.channel_groups):
             x_c = x[:, i].permute(0, 2, 1)  # (N, D, L)
-            x_c = x_c.view(x_c.shape[0], x_c.shape[1], int(x_c.shape[2] ** 0.5), int(x_c.shape[2] ** 0.5))
+            x_c = x_c.view(
+                x_c.shape[0],
+                x_c.shape[1],
+                int(x_c.shape[2] ** 0.5),
+                int(x_c.shape[2] ** 0.5),
+            )
             x_c_patch.append(x_c)
 
         x = torch.cat(x_c_patch, dim=1)
@@ -211,18 +271,25 @@ class SatMAE(nn.Module):
 
 
 class SatMAE_Classifier(nn.Module):
-    """ Masked Autoencoder with VisionTransformer backbone
-    """
+    """Masked Autoencoder with VisionTransformer backbone"""
 
-    
-    def __init__(self, img_size=96, patch_size=8, in_chans=10, output_dim=1,
-                 channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
-                 # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
-                 # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
-                 channel_embed=256, embed_dim=1024, depth=24, num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm,
-                 ):
-        
+    def __init__(
+        self,
+        img_size=96,
+        patch_size=8,
+        in_chans=10,
+        output_dim=1,
+        channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9)),
+        # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
+        # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
+        channel_embed=256,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+    ):
+
         super().__init__()
 
         self.in_c = in_chans
@@ -231,24 +298,31 @@ class SatMAE_Classifier(nn.Module):
         self.output_dim = output_dim
         num_groups = len(channel_groups)
 
-                # --------------------------------------------------------------------------
+        # --------------------------------------------------------------------------
         # encoder specifics
-        self.vit_encoder = ViTGroupedChannelsEncoder(img_size=img_size, patch_size=patch_size, 
-                                                     in_chans=in_chans, output_dim=output_dim,
-                                                     channel_groups=channel_groups,
-                                                     channel_embed=channel_embed, embed_dim=embed_dim, depth=depth, num_heads=num_heads,
-                                                     mlp_ratio=mlp_ratio, norm_layer=norm_layer,)
- 
+        self.vit_encoder = ViTGroupedChannelsEncoder(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            output_dim=output_dim,
+            channel_groups=channel_groups,
+            channel_embed=channel_embed,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            mlp_ratio=mlp_ratio,
+            norm_layer=norm_layer,
+        )
+
         # --------------------------------------------------------------------------
 
         # CNN Decoder Blocks:
-        self.classification_head = nn.Sequential(nn.Linear(in_features=embed_dim, out_features=int(embed_dim/2)),
-                                                 nn.LayerNorm(int(embed_dim/2)),
-                                                 nn.ReLU(),
-                                                 nn.Linear(in_features=int(embed_dim/2), out_features=output_dim)
-                                                 )
-
-
+        self.classification_head = nn.Sequential(
+            nn.Linear(in_features=embed_dim, out_features=int(embed_dim / 2)),
+            nn.LayerNorm(int(embed_dim / 2)),
+            nn.ReLU(),
+            nn.Linear(in_features=int(embed_dim / 2), out_features=output_dim),
+        )
 
     def forward(self, x):
         x = self.vit_encoder(x)
@@ -261,56 +335,108 @@ class SatMAE_Classifier(nn.Module):
 
 def vit_base(**kwargs):
     model = SatMAE(
-        channel_embed=256, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        channel_embed=256,
+        embed_dim=768,
+        depth=12,
+        num_heads=12,
+        mlp_ratio=4,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        **kwargs,
+    )
     return model
 
 
 def vit_large(**kwargs):
     model = SatMAE(
-        channel_embed=256, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        channel_embed=256,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        mlp_ratio=4,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        **kwargs,
+    )
     return model
 
 
 def vit_large_classifier(**kwargs):
     model = SatMAE_Classifier(
-        channel_embed=256, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        channel_embed=256,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        mlp_ratio=4,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        **kwargs,
+    )
     return model
 
 
 def vit_huge(**kwargs):
     model = SatMAE(
-        embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        embed_dim=1280,
+        depth=32,
+        num_heads=16,
+        mlp_ratio=4,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        **kwargs,
+    )
     return model
 
 
-def satmae_vit_cnn(checkpoint, img_size=96, patch_size=8, in_chans=10, output_dim=1,
-                   decoder_norm='batch', decoder_padding='same', decoder_activation='relu', decoder_depths=[2, 2, 8, 2],
-                   decoder_dims=[160, 320, 640, 1280], freeze_body=True, classifier=False, **kwargs):
-
-    
+def satmae_vit_cnn(
+    checkpoint,
+    img_size=96,
+    patch_size=8,
+    in_chans=10,
+    output_dim=1,
+    decoder_norm="batch",
+    decoder_padding="same",
+    decoder_activation="relu",
+    decoder_depths=[2, 2, 8, 2],
+    decoder_dims=[160, 320, 640, 1280],
+    freeze_body=True,
+    classifier=False,
+    **kwargs,
+):
 
     if classifier:
-        model = vit_large_classifier(img_size=img_size, patch_size=patch_size, in_chans=in_chans, output_dim=output_dim,
-                                     **kwargs)
+        model = vit_large_classifier(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            output_dim=output_dim,
+            **kwargs,
+        )
 
     else:
 
-        model = vit_large(img_size=img_size, patch_size=patch_size, in_chans=in_chans, output_dim=output_dim,
-                          decoder_norm=decoder_norm, decoder_padding=decoder_padding, decoder_activation=decoder_activation,
-                          decoder_depths=decoder_depths, decoder_dims=decoder_dims,
-                          **kwargs)
+        model = vit_large(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            output_dim=output_dim,
+            decoder_norm=decoder_norm,
+            decoder_padding=decoder_padding,
+            decoder_activation=decoder_activation,
+            decoder_depths=decoder_depths,
+            decoder_dims=decoder_dims,
+            **kwargs,
+        )
 
     # load pre-trained model weights
     state_dict = model.vit_encoder.state_dict()
-    checkpoint_model = checkpoint['model']
+    checkpoint_model = checkpoint["model"]
 
     # model_sd, shared_weights = load_encoder_weights(checkpoint_model, state_dict)
 
-    for k in ['pos_embed', 'patch_embed.proj.weight', 'patch_embed.proj.bias', 'head.weight', 'head.bias']:
+    for k in [
+        "pos_embed",
+        "patch_embed.proj.weight",
+        "patch_embed.proj.bias",
+        "head.weight",
+        "head.bias",
+    ]:
         if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
             print(f"Removing key {k} from pretrained checkpoint")
             del checkpoint_model[k]
@@ -324,16 +450,24 @@ def satmae_vit_cnn(checkpoint, img_size=96, patch_size=8, in_chans=10, output_di
             param.requires_grad = False
 
     return model
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-data_mean = torch.FloatTensor(data_mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+data_mean = (
+    torch.FloatTensor(data_mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
+)
 data_std = torch.FloatTensor(data_std).unsqueeze(0).unsqueeze(2).unsqueeze(3).to(device)
-print("data_mean",data_mean.shape)
-def train(model, x , y):
+print("data_mean", data_mean.shape)
+
+
+def train(model, x, y):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15, 50], gamma=0.5)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+        optimizer, milestones=[15, 50], gamma=0.5
+    )
 
-    '''Training code'''
+    """Training code"""
     # Prepare for the optimizer and scheduler
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
 
@@ -378,8 +512,11 @@ def train(model, x , y):
 
         # print("lr",lr_scheduler.get_last_lr()[0])
     return model
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     from datetime import datetime
+
     start_time = datetime.now()
 
     """
@@ -449,44 +586,60 @@ if __name__ == '__main__':
     end_time = datetime.now()
     print('Duration: {}'.format(end_time - start_time))
     """
-    checkpoint = torch.load('/home/code/data_storage_home/data/disaster/pretrained_model/pretrain-vit-large-e199.pth')
-    model = satmae_vit_cnn(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same', in_chans=10,
-            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
-            classifier=False)
+    checkpoint = torch.load(
+        "/home/code/data_storage_home/data/disaster/pretrained_model/pretrain-vit-large-e199.pth"
+    )
+    model = satmae_vit_cnn(
+        checkpoint,
+        output_dim=1,
+        decoder_norm="batch",
+        decoder_padding="same",
+        in_chans=10,
+        decoder_activation="relu",
+        decoder_depths=[2, 2, 8, 2],
+        decoder_dims=[160, 320, 640, 1280],
+        freeze_body=True,
+        classifier=False,
+    )
 
     model = model.to(device)
 
-    import utils.dataset.era5_extreme_temperature as da
     import numpy as np
+
+    import utils.dataset.era5_extreme_temperature as da
 
     dataset = da.Era5HeatWave(horizon=28, chip_size=96)
     train_idx = 0
     test_idx = 183
 
-    x = dataset[train_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+    x = dataset[train_idx]["x"].unsqueeze(0).unsqueeze(1).to(device)  # (1, 1, 128, 128)
 
-    mask = dataset[train_idx]['mask'].unsqueeze(0).to(device)
-    data = torch.cat([x,mask , x, x, x, x, x, x], dim=1)# (1, 6, 224, 224)
+    mask = dataset[train_idx]["mask"].unsqueeze(0).to(device)
+    data = torch.cat([x, mask, x, x, x, x, x, x], dim=1)  # (1, 6, 224, 224)
     print("data", data.shape)
 
-    data = (data - data_mean) /data_std
+    data = (data - data_mean) / data_std
     # print(x.shape) # (w,h)
-    y = dataset[train_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+    y = dataset[train_idx]["y"].unsqueeze(0).unsqueeze(1).to(device)
 
     y = (y - 301.66) / 12.221
     best_model = train(model, data, y)
     # best_model = model
-        # do your work here
+    # do your work here
     end_time = datetime.now()
-    print('Duration: {}'.format(end_time - start_time))
-    x_test = dataset[test_idx]['x'].unsqueeze(0).unsqueeze(1).to(device) # (1, 1, 128, 128)
+    print("Duration: {}".format(end_time - start_time))
+    x_test = (
+        dataset[test_idx]["x"].unsqueeze(0).unsqueeze(1).to(device)
+    )  # (1, 1, 128, 128)
 
-    mask_test = dataset[test_idx]['mask'].unsqueeze(0).to(device) #(1,3, 128, 128 )
-    data_test = torch.cat([x_test, mask_test, x_test, x_test, x_test, x_test, x_test, x_test], dim=1)
+    mask_test = dataset[test_idx]["mask"].unsqueeze(0).to(device)  # (1,3, 128, 128 )
+    data_test = torch.cat(
+        [x_test, mask_test, x_test, x_test, x_test, x_test, x_test, x_test], dim=1
+    )
 
-    data_test = (data_test - data_mean) /data_std
-    print("data_test", data_test.shape) # (w,h)
-    y_test = dataset[test_idx]['y'].unsqueeze(0).unsqueeze(1).to(device)
+    data_test = (data_test - data_mean) / data_std
+    print("data_test", data_test.shape)  # (w,h)
+    y_test = dataset[test_idx]["y"].unsqueeze(0).unsqueeze(1).to(device)
 
     y_test = (y_test - 301.66) / 12.221
 
@@ -497,19 +650,20 @@ if __name__ == '__main__':
     pred_test = pred_test.detach().cpu().numpy()
     data_mean = 301.66
     data_std = 12.221
-    vmin = np.min(y_test[0, 0]* data_std + data_mean)
-    vmax = np.max(y_test[0, 0]* data_std + data_mean)
+    vmin = np.min(y_test[0, 0] * data_std + data_mean)
+    vmax = np.max(y_test[0, 0] * data_std + data_mean)
     import matplotlib.pyplot as plt
+
     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-    im = axes[0].imshow(data_test[0, 0]* data_std + data_mean)
+    im = axes[0].imshow(data_test[0, 0] * data_std + data_mean)
     plt.colorbar(im, ax=axes[0])
     axes[0].set_title("input")
 
-    im = axes[1].imshow(y_test[0, 0]* data_std + data_mean)
+    im = axes[1].imshow(y_test[0, 0] * data_std + data_mean)
     plt.colorbar(im, ax=axes[1])
-    axes[1].set_title('target')
+    axes[1].set_title("target")
 
-    im = axes[2].imshow(pred_test[0, 0]* data_std + data_mean)
+    im = axes[2].imshow(pred_test[0, 0] * data_std + data_mean)
     plt.colorbar(im, ax=axes[2])
-    axes[2].set_title('pred')
-    plt.savefig('test_pred_pretrain_satMae.png')
+    axes[2].set_title("pred")
+    plt.savefig("test_pred_pretrain_satMae.png")

@@ -1,10 +1,13 @@
-from huggingface_hub import HfApi
 import os
 from pathlib import Path
+
+from huggingface_hub import HfApi
+
+
 def upload_wewather_dataset():
-    LOCAL_DATA_DIR = Path(__file__).parent.parent / 'data' / 'weather'
+    LOCAL_DATA_DIR = Path(__file__).parent.parent / "data" / "weather"
     api = HfApi()
-    #api.create_repo(repo_id="ee-bench_v1.0", repo_type="dataset", private=True)
+    # api.create_repo(repo_id="ee-bench_v1.0", repo_type="dataset", private=True)
 
     for root, subdirs, files in os.walk(LOCAL_DATA_DIR):
         for file in files:
@@ -16,15 +19,17 @@ def upload_wewather_dataset():
                     path_or_fileobj=os.path.join(root, filename),
                     path_in_repo=f"data/weather/{filename}",
                     repo_id="zhaoshan/ee-bench_v1.0",
-                    repo_type="dataset"
+                    repo_type="dataset",
                 )
+
+
 def upload_eo_dataset():
-    LOCAL_DATA_DIR = Path(__file__).parent.parent.parent / 'data' / 'eo'
+    LOCAL_DATA_DIR = Path(__file__).parent.parent.parent / "data" / "eo"
 
     if not os.path.exists(LOCAL_DATA_DIR):
         print("The local path does not exist.")
     api = HfApi()
-    #api.create_repo(repo_id="ee-bench_v1.0", repo_type="dataset", private=True)
+    # api.create_repo(repo_id="ee-bench_v1.0", repo_type="dataset", private=True)
     for root, subdirs, _ in os.walk(LOCAL_DATA_DIR):
         for subdir in subdirs:
             for file in os.listdir(os.path.join(root, subdir)):
@@ -36,7 +41,9 @@ def upload_eo_dataset():
                         path_or_fileobj=os.path.join(root, subdir, filename),
                         path_in_repo=f"data/eo/{filename}",
                         repo_id="zhaoshan/ee-bench_v1.0",
-                        repo_type="dataset"
+                        repo_type="dataset",
                     )
+
+
 if __name__ == "__main__":
     upload_wewather_dataset()

@@ -9,21 +9,30 @@ from functools import partial
 
 import torch
 import torch.nn as nn
+from timm.models.vision_transformer import Block, PatchEmbed
 from torch.nn import functional as F
-
-from timm.models.vision_transformer import PatchEmbed, Block
 
 from utils.transformer_utils import get_2d_sincos_pos_embed
 
 
 class AutoencoderViT(nn.Module):
-    """ Autoencoder with VisionTransformer backbone
-    """
+    """Autoencoder with VisionTransformer backbone"""
 
-    def __init__(self, chw:tuple=(10, 128, 128), patch_size:int=8, out_chans:int=10,
-                 embed_dim=768, depth=12, num_heads=16,
-                 decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,):
+    def __init__(
+        self,
+        chw: tuple = (10, 128, 128),
+        patch_size: int = 8,
+        out_chans: int = 10,
+        embed_dim=768,
+        depth=12,
+        num_heads=16,
+        decoder_embed_dim=512,
+        decoder_depth=8,
+        decoder_num_heads=16,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+        norm_pix_loss=False,
+    ):
         super().__init__()
 
         # Attributes
@@ -32,19 +41,28 @@ class AutoencoderViT(nn.Module):
         self.img_size = chw[1]
         self.patch_size = patch_size
 
-
         # --------------------------------------------------------------------------
         # MAE encoder specifics
         self.patch_embed = PatchEmbed(self.img_size, patch_size, self.in_c, embed_dim)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim),
-                                      requires_grad=True)  # learnable with sin-cos embedding init
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + 1, embed_dim), requires_grad=True
+        )  # learnable with sin-cos embedding init
 
-        self.blocks = nn.ModuleList([
-            Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                Block(
+                    embed_dim,
+                    num_heads,
+                    mlp_ratio,
+                    qkv_bias=True,
+                    norm_layer=norm_layer,
+                )
+                for i in range(depth)
+            ]
+        )
         self.norm = norm_layer(embed_dim)
         # --------------------------------------------------------------------------
 
@@ -56,15 +74,27 @@ class AutoencoderViT(nn.Module):
         # mask is noise instead of zeros
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
-        self.decoder_pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, decoder_embed_dim),
-                                              requires_grad=True)  # learnable with sin-cos embedding init
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + 1, decoder_embed_dim), requires_grad=True
+        )  # learnable with sin-cos embedding init
 
-        self.decoder_blocks = nn.ModuleList([
-            Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
-            for i in range(decoder_depth)])
+        self.decoder_blocks = nn.ModuleList(
+            [
+                Block(
+                    decoder_embed_dim,
+                    decoder_num_heads,
+                    mlp_ratio,
+                    qkv_bias=True,
+                    norm_layer=norm_layer,
+                )
+                for i in range(decoder_depth)
+            ]
+        )
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
-        self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 2 * out_chans, bias=True)  # decoder to patch
+        self.decoder_pred = nn.Linear(
+            decoder_embed_dim, patch_size**2 * out_chans, bias=True
+        )  # decoder to patch
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
@@ -74,21 +104,29 @@ class AutoencoderViT(nn.Module):
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], int(self.patch_embed.num_patches ** .5),
-                                            cls_token=True)
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1],
+            int(self.patch_embed.num_patches**0.5),
+            cls_token=True,
+        )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        decoder_pos_embed = get_2d_sincos_pos_embed(self.decoder_pos_embed.shape[-1],
-                                                    int(self.patch_embed.num_patches ** .5), cls_token=True)
-        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1],
+            int(self.patch_embed.num_patches**0.5),
+            cls_token=True,
+        )
+        self.decoder_pos_embed.data.copy_(
+            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0)
+        )
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embed.proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=.02)
-        torch.nn.init.normal_(self.mask_token, std=.02)
+        torch.nn.init.normal_(self.cls_token, std=0.02)
+        torch.nn.init.normal_(self.mask_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -117,8 +155,8 @@ class AutoencoderViT(nn.Module):
         c = imgs.shape[1]
         h = w = imgs.shape[2] // p
         x = imgs.reshape(shape=(imgs.shape[0], c, h, p, w, p))
-        x = torch.einsum('nchpwq->nhwpqc', x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * c))
+        x = torch.einsum("nchpwq->nhwpqc", x)
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * c))
         return x
 
     def unpatchify(self, x, c=None):
@@ -132,11 +170,11 @@ class AutoencoderViT(nn.Module):
         if c == None:
             c = self.in_c
         p = self.patch_size
-        h = w = int(x.shape[1] ** .5)
+        h = w = int(x.shape[1] ** 0.5)
         assert h * w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
         return imgs
 

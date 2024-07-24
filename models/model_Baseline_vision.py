@@ -1,15 +1,21 @@
-from transformers import SegformerForSemanticSegmentation, SegformerConfig
 import json
-from huggingface_hub import hf_hub_download
-import torch.nn as nn
-import timm
 import math
-import torch
-import torch.nn.functional as F
 import sys
-sys.path.insert(0, '/home/EarthExtreme-Bench')
-from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+
+import timm
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from huggingface_hub import hf_hub_download
+
+from transformers import SegformerConfig, SegformerForSemanticSegmentation
+
+sys.path.insert(0, "/home/EarthExtreme-Bench")
 from torchsummary import summary
+
+from transformers import (ConvNextConfig, UperNetConfig,
+                          UperNetForSemanticSegmentation)
+
 
 class BaselineNet(nn.Module):
     def __init__(self, *, input_dim=4, output_dim=1, model_name):
@@ -22,29 +28,49 @@ class BaselineNet(nn.Module):
             original_model = UperNetForSemanticSegmentation.from_pretrained(model_name)
             original_conv1 = original_model.backbone.embeddings.patch_embeddings
 
-            backbone_config = ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"], num_channels=input_dim)
-            config = UperNetConfig(backbone_config=backbone_config, num_labels=output_dim)
-            model = UperNetForSemanticSegmentation.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)
+            backbone_config = ConvNextConfig(
+                out_features=["stage1", "stage2", "stage3", "stage4"],
+                num_channels=input_dim,
+            )
+            config = UperNetConfig(
+                backbone_config=backbone_config, num_labels=output_dim
+            )
+            model = UperNetForSemanticSegmentation.from_pretrained(
+                model_name, config=config, ignore_mismatched_sizes=True
+            )
             for name, module in model.backbone.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
                     # Modify the conv layer to accept 6 channels
                     print(f"copying the weights to {name}")
                     with torch.no_grad():  # original_conv1.weight.shape)
-                        module.weight[:, :6, :, :] = nn.Parameter(original_conv1.weight.repeat(1, 2, 1, 1) / 3.0)
-                        module.weight[:, 6:, :, :] = nn.Parameter(original_conv1.weight.mean(dim=1).unsqueeze(1).repeat(1, 2, 1, 1) / 3.0)
+                        module.weight[:, :6, :, :] = nn.Parameter(
+                            original_conv1.weight.repeat(1, 2, 1, 1) / 3.0
+                        )
+                        module.weight[:, 6:, :, :] = nn.Parameter(
+                            original_conv1.weight.mean(dim=1)
+                            .unsqueeze(1)
+                            .repeat(1, 2, 1, 1)
+                            / 3.0
+                        )
         elif model_name == "nvidia/mit-b0":
-            original_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0", num_labels=output_dim)
+            original_model = SegformerForSemanticSegmentation.from_pretrained(
+                "nvidia/mit-b0", num_labels=output_dim
+            )
             # for name, layer in original_model.named_modules():
             #     print(name, layer)
             original_conv1 = original_model.segformer.encoder.patch_embeddings[0].proj
             config = SegformerConfig(num_channels=input_dim, num_labels=output_dim)
-            model = SegformerForSemanticSegmentation.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)
+            model = SegformerForSemanticSegmentation.from_pretrained(
+                model_name, config=config, ignore_mismatched_sizes=True
+            )
             for name, module in model.segformer.encoder.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
                     # Modify the conv layer to accept 6 channels
                     print(f"copying the weights to {name}")
                     with torch.no_grad():  # original_conv1.weight.shape)
-                        model.weight = nn.Parameter(original_conv1.weight.repeat(1, 2, 1, 1) / 3.0)
+                        model.weight = nn.Parameter(
+                            original_conv1.weight.repeat(1, 2, 1, 1) / 3.0
+                        )
 
                         # module.weight[:, :6, :, :] = nn.Parameter(original_conv1.weight.repeat(1, 2, 1, 1) / 3.0)
                         # module.weight[:, 6:, :, :] = nn.Parameter(
@@ -57,6 +83,7 @@ class BaselineNet(nn.Module):
         # configuration = model.config
 
         # self.last = nn.Conv2d(model.decode_head.classifier.out_channels, output_dim, kernel_size=1, stride=1, padding=0)
+
     def _initialize_weights(self, std=0.02):
         for m in self.decoder:
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
@@ -74,14 +101,17 @@ class BaselineNet(nn.Module):
         x = self.model(x)
         x = x.logits
         if x.size()[-2:] != raw_size[-2:]:
-            x = nn.functional.interpolate(x, size=raw_size[-2:], mode="bilinear",
-                                                             align_corners=False)
+            x = nn.functional.interpolate(
+                x, size=raw_size[-2:], mode="bilinear", align_corners=False
+            )
         return x
+
+
 if __name__ == "__main__":
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input = torch.randn((1, 8, 512, 512)).to(device)
     labels = torch.randn((1, 1, 512, 512)).to(device)
-    model = BaselineNet(input_dim=8, output_dim=3, model_name = 'nvidia/mit-b0')
+    model = BaselineNet(input_dim=8, output_dim=3, model_name="nvidia/mit-b0")
     # model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny")
     model = model.to(device)
     model.train()

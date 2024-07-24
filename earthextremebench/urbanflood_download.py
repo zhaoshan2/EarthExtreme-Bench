@@ -1,6 +1,9 @@
-from datasets import load_dataset
 from pathlib import Path
+
+from datasets import load_dataset
 from huggingface_hub import HfApi, hf_hub_download
+
+
 def download_benchmark():
     UR_BENCH_DIR = "/home/EarthExtreme-Bench/data/eo/flood/"
     local_directory = Path(UR_BENCH_DIR)
@@ -12,7 +15,7 @@ def download_benchmark():
     dataset_files = api.list_repo_files(repo_id=dataset_repo, repo_type="dataset")
 
     for file in dataset_files:
-        if file.startswith('03_FU/SAR'):
+        if file.startswith("03_FU/SAR"):
             local_file_path = local_directory / file
 
             local_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -25,5 +28,7 @@ def download_benchmark():
                 local_dir=local_directory,
                 repo_type="dataset",
             )
+
+
 if __name__ == "__main__":
     download_benchmark()

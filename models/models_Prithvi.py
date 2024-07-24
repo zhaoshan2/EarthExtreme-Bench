@@ -2,6 +2,16 @@
 # All rights reserved.
 import json
 import os
+import sys
+from functools import partial
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+from timm.models.layers import to_2tuple
+from timm.models.vision_transformer import Block
+
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
@@ -10,24 +20,19 @@ import os
 # DeiT: https://github.com/facebookresearch/deit
 # --------------------------------------------------------
 
-from functools import partial
 
-import torch
-import torch.nn as nn
 
-from timm.models.vision_transformer import Block
-from timm.models.layers import to_2tuple
 
-import numpy as np
-import sys
-import matplotlib.pyplot as plt
-sys.path.insert(0, '/home/EarthExtreme-Bench')
-# from einops import rearrange
-from utils.Prithvi_100M_config import model_args, data_args
-from models.model_DecoderUtils import CoreDecoder
-from utils import score
-from utils import logging_utils
+
+sys.path.insert(0, "/home/EarthExtreme-Bench")
 from pathlib import Path
+
+from models.model_DecoderUtils import CoreDecoder
+from utils import logging_utils, score
+# from einops import rearrange
+from utils.Prithvi_100M_config import data_args, model_args
+
+
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     embed_dim: output dimension for each position
@@ -36,17 +41,18 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float32)
-    omega /= embed_dim / 2.
-    omega = 1. / 10000**omega  # (D/2,)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
-    out = np.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
 
-    emb_sin = np.sin(out) # (M, D/2)
-    emb_cos = np.cos(out) # (M, D/2)
+    emb_sin = np.sin(out)  # (M, D/2)
+    emb_cos = np.cos(out)  # (M, D/2)
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
+
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     assert embed_dim % 2 == 0
@@ -55,8 +61,9 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
 
-    emb = np.concatenate([emb_h, emb_w], axis=1) # (H*W, D)
+    emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
     return emb
+
 
 def get_3d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     """
@@ -89,20 +96,21 @@ def get_3d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
 
 
 class PatchEmbed(nn.Module):
-    """ Frames of 2D Images to Patch Embedding
+    """Frames of 2D Images to Patch Embedding
     The 3D version of timm.models.vision_transformer.PatchEmbed
     """
+
     def __init__(
-            self,
-            img_size=224,
-            patch_size=16,
-            num_frames=3,
-            tubelet_size=1,
-            in_chans=3,
-            embed_dim=768,
-            norm_layer=None,
-            flatten=True,
-            bias=True,
+        self,
+        img_size=224,
+        patch_size=16,
+        num_frames=3,
+        tubelet_size=1,
+        in_chans=3,
+        embed_dim=768,
+        norm_layer=None,
+        flatten=True,
+        bias=True,
     ):
         super().__init__()
         img_size = to_2tuple(img_size)
@@ -111,13 +119,21 @@ class PatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.num_frames = num_frames
         self.tubelet_size = tubelet_size
-        self.grid_size = (num_frames // tubelet_size, img_size[0] // patch_size[0], img_size[1] // patch_size[1])
+        self.grid_size = (
+            num_frames // tubelet_size,
+            img_size[0] // patch_size[0],
+            img_size[1] // patch_size[1],
+        )
         self.num_patches = self.grid_size[0] * self.grid_size[1] * self.grid_size[2]
         self.flatten = flatten
 
-        self.proj = nn.Conv3d(in_chans, embed_dim,
-                              kernel_size=(tubelet_size, patch_size[0], patch_size[1]),
-                              stride=(tubelet_size, patch_size[0], patch_size[1]), bias=bias)
+        self.proj = nn.Conv3d(
+            in_chans,
+            embed_dim,
+            kernel_size=(tubelet_size, patch_size[0], patch_size[1]),
+            stride=(tubelet_size, patch_size[0], patch_size[1]),
+            bias=bias,
+        )
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
@@ -127,29 +143,56 @@ class PatchEmbed(nn.Module):
             x = x.flatten(2).transpose(1, 2)  # B,C,T,H,W -> B,C,L -> B,L,C
         x = self.norm(x)
         return x
-    
+
+
 class PrithviEncoder(nn.Module):
-    def __init__(self, img_size=224, patch_size=16,
-                 num_frames=3, tubelet_size=1,
-                 in_chans=3, embed_dim=1024, depth=24, num_heads=16, output_dim=1,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
-                 decoder_norm='batch', decoder_padding='same',
-                 decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280]
-                 ):
-        
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        num_frames=3,
+        tubelet_size=1,
+        in_chans=3,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        output_dim=1,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+        norm_pix_loss=False,
+        decoder_norm="batch",
+        decoder_padding="same",
+        decoder_activation="relu",
+        decoder_depths=[2, 2, 8, 2],
+        decoder_dims=[160, 320, 640, 1280],
+    ):
+
         super().__init__()
 
         # --------------------------------------------------------------------------
         # encoder specifics
-        self.patch_embed = PatchEmbed(img_size, patch_size,num_frames, tubelet_size, in_chans, embed_dim)
+        self.patch_embed = PatchEmbed(
+            img_size, patch_size, num_frames, tubelet_size, in_chans, embed_dim
+        )
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)  # fixed sin-cos embedding
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False
+        )  # fixed sin-cos embedding
 
-        self.blocks = nn.ModuleList([
-            Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                Block(
+                    embed_dim,
+                    num_heads,
+                    mlp_ratio,
+                    qkv_bias=True,
+                    norm_layer=norm_layer,
+                )
+                for i in range(depth)
+            ]
+        )
         self.norm = norm_layer(embed_dim)
 
         self.initialize_weights()
@@ -157,16 +200,17 @@ class PrithviEncoder(nn.Module):
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_3d_sincos_pos_embed(self.pos_embed.shape[-1], self.patch_embed.grid_size, cls_token=True)
+        pos_embed = get_3d_sincos_pos_embed(
+            self.pos_embed.shape[-1], self.patch_embed.grid_size, cls_token=True
+        )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
-
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embed.proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=.02)
+        torch.nn.init.normal_(self.cls_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -188,7 +232,6 @@ class PrithviEncoder(nn.Module):
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
 
-
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
@@ -204,25 +247,46 @@ class PrithviEncoder(nn.Module):
 
 
 class Prithvi(nn.Module):
-    """ Masked Autoencoder with VisionTransformer backbone
-    """
-    def __init__(self, img_size=224, patch_size=16,
-                 num_frames=3, tubelet_size=1,
-                 in_chans=3, embed_dim=1024, depth=24, num_heads=16, output_dim=1,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
-                 decoder_norm='batch', decoder_padding='same',
-                 decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280]
-                 ):
+    """Masked Autoencoder with VisionTransformer backbone"""
+
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        num_frames=3,
+        tubelet_size=1,
+        in_chans=3,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        output_dim=1,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+        norm_pix_loss=False,
+        decoder_norm="batch",
+        decoder_padding="same",
+        decoder_activation="relu",
+        decoder_depths=[2, 2, 8, 2],
+        decoder_dims=[160, 320, 640, 1280],
+    ):
         super().__init__()
 
         # --------------------------------------------------------------------------
         # encoder specifics
-        self.vit_encoder = PrithviEncoder(img_size=img_size, patch_size=patch_size,
-                                          num_frames=num_frames, tubelet_size=tubelet_size,
-                                          in_chans=in_chans, embed_dim=embed_dim, depth=depth, 
-                                          num_heads=num_heads, output_dim=output_dim,
-                                          mlp_ratio=mlp_ratio, norm_layer=norm_layer,
-                                          norm_pix_loss=norm_pix_loss,)
+        self.vit_encoder = PrithviEncoder(
+            img_size=img_size,
+            patch_size=patch_size,
+            num_frames=num_frames,
+            tubelet_size=tubelet_size,
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            output_dim=output_dim,
+            mlp_ratio=mlp_ratio,
+            norm_layer=norm_layer,
+            norm_pix_loss=norm_pix_loss,
+        )
 
         # --------------------------------------------------------------------------
 
@@ -232,22 +296,23 @@ class Prithvi(nn.Module):
         self.dims = decoder_dims
         self.output_dim = output_dim
 
-        self.decoder_head = CoreDecoder(embedding_dim=embed_dim,
-                                        output_dim=output_dim,
-                                        depths=decoder_depths, 
-                                        dims= decoder_dims,
-                                        activation=decoder_activation,
-                                        padding=decoder_padding, 
-                                        norm=decoder_norm)
-        
-        self.decoder_downsample_block = nn.Identity()
+        self.decoder_head = CoreDecoder(
+            embedding_dim=embed_dim,
+            output_dim=output_dim,
+            depths=decoder_depths,
+            dims=decoder_dims,
+            activation=decoder_activation,
+            padding=decoder_padding,
+            norm=decoder_norm,
+        )
 
+        self.decoder_downsample_block = nn.Identity()
 
     def reshape(self, x):
         # Separate channel axis
         N, L, D = x.shape
         x = x.permute(0, 2, 1)
-        x = x.view(N, D, int(L ** 0.5), int(L ** 0.5))
+        x = x.view(N, D, int(L**0.5), int(L**0.5))
 
         return x
 
@@ -263,34 +328,54 @@ class Prithvi(nn.Module):
         x = self.decoder_head(x)
         return x
 
+
 class PrithviClassifier(nn.Module):
-    """ Masked Autoencoder with VisionTransformer backbone
-    """
-    def __init__(self, img_size=224, patch_size=16,
-                 num_frames=3, tubelet_size=1,
-                 in_chans=3, embed_dim=1024, depth=24, num_heads=16, output_dim=1,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False,
-                 ):
+    """Masked Autoencoder with VisionTransformer backbone"""
+
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        num_frames=3,
+        tubelet_size=1,
+        in_chans=3,
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        output_dim=1,
+        mlp_ratio=4.0,
+        norm_layer=nn.LayerNorm,
+        norm_pix_loss=False,
+    ):
         super().__init__()
 
         # --------------------------------------------------------------------------
         # encoder specifics
-        self.vit_encoder = PrithviEncoder(img_size=img_size, patch_size=patch_size,
-                                          num_frames=num_frames, tubelet_size=tubelet_size,
-                                          in_chans=in_chans, embed_dim=embed_dim, depth=depth, 
-                                          num_heads=num_heads, output_dim=output_dim,
-                                          mlp_ratio=mlp_ratio, norm_layer=norm_layer,
-                                          norm_pix_loss=norm_pix_loss,)
+        self.vit_encoder = PrithviEncoder(
+            img_size=img_size,
+            patch_size=patch_size,
+            num_frames=num_frames,
+            tubelet_size=tubelet_size,
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            depth=depth,
+            num_heads=num_heads,
+            output_dim=output_dim,
+            mlp_ratio=mlp_ratio,
+            norm_layer=norm_layer,
+            norm_pix_loss=norm_pix_loss,
+        )
 
         # --------------------------------------------------------------------------
         # --------------------------------------------------------------------------
         # CNN Decoder Blocks:
 
-        self.classification_head = nn.Sequential(nn.Linear(in_features=embed_dim, out_features=int(embed_dim/2)),
-                                                 nn.LayerNorm(int(embed_dim/2)),
-                                                 nn.ReLU(),
-                                                 nn.Linear(in_features=int(embed_dim/2), out_features=output_dim)
-                                                 )
+        self.classification_head = nn.Sequential(
+            nn.Linear(in_features=embed_dim, out_features=int(embed_dim / 2)),
+            nn.LayerNorm(int(embed_dim / 2)),
+            nn.ReLU(),
+            nn.Linear(in_features=int(embed_dim / 2), out_features=output_dim),
+        )
 
     def forward(self, x):
         x = x[:, :, None, :, :]
@@ -300,22 +385,37 @@ class PrithviClassifier(nn.Module):
         x = self.classification_head(x)
         return x
 
-def prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same',
-            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
-            classifier=False, inference=False):
+
+def prithvi(
+    checkpoint,
+    output_dim=1,
+    decoder_norm="batch",
+    decoder_padding="same",
+    decoder_activation="relu",
+    decoder_depths=[2, 2, 8, 2],
+    decoder_dims=[160, 320, 640, 1280],
+    freeze_body=True,
+    classifier=False,
+    inference=False,
+):
 
     if classifier:
-        model = PrithviClassifier(output_dim=output_dim,
-                                  **model_args)
+        model = PrithviClassifier(output_dim=output_dim, **model_args)
 
     else:
-        model = Prithvi(output_dim=output_dim, decoder_norm=decoder_norm,  decoder_padding=decoder_padding,
-                        decoder_activation=decoder_activation, decoder_depths=decoder_depths, decoder_dims=decoder_dims,
-                        **model_args)
+        model = Prithvi(
+            output_dim=output_dim,
+            decoder_norm=decoder_norm,
+            decoder_padding=decoder_padding,
+            decoder_activation=decoder_activation,
+            decoder_depths=decoder_depths,
+            decoder_dims=decoder_dims,
+            **model_args,
+        )
 
     if not inference:
-        del checkpoint['pos_embed']
-        del checkpoint['decoder_pos_embed']
+        del checkpoint["pos_embed"]
+        del checkpoint["decoder_pos_embed"]
 
     # load pre-trained model
     msg = model.vit_encoder.load_state_dict(checkpoint, strict=False)
@@ -328,14 +428,17 @@ def prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='sam
     model.float()
     return model
 
+
 def train(model, train_loader, val_loader, device, save_path: Path, **args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-6)
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15, 50], gamma=0.5)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+        optimizer, milestones=[15, 50], gamma=0.5
+    )
     # training epoch
     epochs = 500
     patience = 20
-    '''Training code'''
+    """Training code"""
     # Prepare for the optimizer and scheduler
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
 
@@ -357,10 +460,10 @@ def train(model, train_loader, val_loader, device, save_path: Path, **args):
             # Note the input and target need to be normalized (done within the function)
             # Call the model and get the output
             # x (b, w, h), y (b, w, h) ,mask (b, 3, w, h) , disno
-            x = train_data['x'].unsqueeze(1).to(device)  # (b, 1, w, h)
-            mask = train_data['mask'].to(device) # (b, 3, w, h)
-            x_train = torch.cat([x, mask, x, x ], dim=1)  # (b, 6, w, h)
-            y_train = train_data['y'].unsqueeze(1).to(device)
+            x = train_data["x"].unsqueeze(1).to(device)  # (b, 1, w, h)
+            mask = train_data["mask"].to(device)  # (b, 3, w, h)
+            x_train = torch.cat([x, mask, x, x], dim=1)  # (b, 6, w, h)
+            y_train = train_data["y"].unsqueeze(1).to(device)
 
             pred = model(x_train)  # (b,c_out,w,h)
 
@@ -383,14 +486,14 @@ def train(model, train_loader, val_loader, device, save_path: Path, **args):
         lr_scheduler.step()
 
         # Validate
-        if i%10 == 0:
+        if i % 10 == 0:
             with torch.no_grad():
                 loss_val = 0
                 for id, val_data in enumerate(val_loader):
-                    x = val_data['x'].unsqueeze(1).to(device)
-                    mask = val_data['mask'].to(device)
+                    x = val_data["x"].unsqueeze(1).to(device)
+                    mask = val_data["mask"].to(device)
                     x_val = torch.cat([x, mask, x, x], dim=1)
-                    y_val = val_data['y'].unsqueeze(1).to(device)
+                    y_val = val_data["y"].unsqueeze(1).to(device)
 
                     pred_val = model(x_val)
                     loss = criterion(pred_val, y_val)
@@ -400,18 +503,21 @@ def train(model, train_loader, val_loader, device, save_path: Path, **args):
                 if loss_val < best_loss:
                     best_loss = loss_val
                     best_epoch = i
-                    best_state = {key: value.cpu() for key, value in model.state_dict().items()}
-                    ckp_path = save_path / str(val_data['meta_info']['disaster'][0])
+                    best_state = {
+                        key: value.cpu() for key, value in model.state_dict().items()
+                    }
+                    ckp_path = save_path / str(val_data["meta_info"]["disaster"][0])
                     if not os.path.exists(ckp_path):
                         os.mkdir(ckp_path)
                     file_path = os.path.join(ckp_path, "best_model.pth")
-                    with open(file_path, 'wb') as f:
+                    with open(file_path, "wb") as f:
                         torch.save(best_state, f)
                 else:
                     if i >= best_epoch + patience:
                         break
             # print("lr",lr_scheduler.get_last_lr()[0])
     return best_state
+
 
 def test(model, test_loader, device, stats, save_path):
 
@@ -421,11 +527,13 @@ def test(model, test_loader, device, stats, save_path):
     with torch.no_grad():
         # iterate through test data
         for id, test_data in enumerate(test_loader):
-            x = test_data['x'].unsqueeze(1).to(device)
-            mask = test_data['mask'].to(device)
+            x = test_data["x"].unsqueeze(1).to(device)
+            mask = test_data["mask"].to(device)
             x_test = torch.cat([x, mask, x, x], dim=1)
-            y_test = test_data['y'].unsqueeze(1).to(device)
-            target_time = f"{test_data['disno'][0]}-{test_data['meta_info']['target_time'][0]}"
+            y_test = test_data["y"].unsqueeze(1).to(device)
+            target_time = (
+                f"{test_data['disno'][0]}-{test_data['meta_info']['target_time'][0]}"
+            )
 
             model.eval()
             pred_test = model(x_test)
@@ -434,24 +542,33 @@ def test(model, test_loader, device, stats, save_path):
             # print("Test loss: {:.5f}".format(loss))
             # pred_test = pred_test.squeeze()
             # y_test = y_test.squeeze()
-            acc[target_time] = score.unweighted_acc_torch(pred_test, y_test).detach().cpu().numpy()[0]
+            acc[target_time] = (
+                score.unweighted_acc_torch(pred_test, y_test).detach().cpu().numpy()[0]
+            )
             # rmse
-            disaster= test_data['meta_info']['disaster'][0]
-            csv_path = save_path / disaster / 'csv'
+            disaster = test_data["meta_info"]["disaster"][0]
+            csv_path = save_path / disaster / "csv"
             if not os.path.exists(csv_path):
                 os.mkdir(csv_path)
 
-            output_test = pred_test * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
-            target_test = y_test * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
+            output_test = (
+                pred_test * stats[f"{disaster}_std"] + stats[f"{disaster}_mean"]
+            )
+            target_test = y_test * stats[f"{disaster}_std"] + stats[f"{disaster}_mean"]
 
-            rmse[target_time] = score.unweighted_rmse_torch(output_test, target_test).detach().cpu().numpy()[0] #returns channel-wise score mean over w,h,b
+            rmse[target_time] = (
+                score.unweighted_rmse_torch(output_test, target_test)
+                .detach()
+                .cpu()
+                .numpy()[0]
+            )  # returns channel-wise score mean over w,h,b
         # Save rmses to csv
         logging_utils.save_errorScores(csv_path, acc, "acc")
         logging_utils.save_errorScores(csv_path, rmse, "rmse")
 
         # visualize the last frame
         # put all tensors to cpu
-        x = x * stats[f'{disaster}_std'] + stats[f'{disaster}_mean']
+        x = x * stats[f"{disaster}_std"] + stats[f"{disaster}_mean"]
         target_test = target_test.detach().cpu().numpy()
         x = x.detach().cpu().numpy()
         output_test = output_test.detach().cpu().numpy()
@@ -462,20 +579,21 @@ def test(model, test_loader, device, stats, save_path):
 
         im = axes[1].imshow(target_test[0, 0])
         plt.colorbar(im, ax=axes[1])
-        axes[1].set_title('target')
+        axes[1].set_title("target")
 
         im = axes[2].imshow(output_test[0, 0])
         plt.colorbar(im, ax=axes[2])
-        axes[2].set_title('pred')
+        axes[2].set_title("pred")
 
-        png_path = save_path / disaster / 'png'
+        png_path = save_path / disaster / "png"
         if not os.path.exists(png_path):
             os.mkdir(png_path)
-        plt.savefig(f'{png_path}/test_pred_pretrain_prithvi.png')
+        plt.savefig(f"{png_path}/test_pred_pretrain_prithvi.png")
 
     return loss
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # main()
     # To do: problem with imcompetible keys
     """
@@ -538,41 +656,56 @@ if __name__ == '__main__':
     plt.savefig('test_pred_nopretrain.png')
 
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     CURR_FOLDER_PATH = Path(__file__).parent.parent  # "/home/EarthExtreme-Bench"
-    SAVE_PATH = CURR_FOLDER_PATH / 'results' / 'Prithvi_100M'
-    checkpoint = torch.load('/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
+    SAVE_PATH = CURR_FOLDER_PATH / "results" / "Prithvi_100M"
+    checkpoint = torch.load(
+        "/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt"
+    )
 
-    model = prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='same',
-            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
-            classifier=False, inference=False)
-    model.load_state_dict(torch.load(SAVE_PATH / 'heatwave' / 'best_model_200.pth'))
+    model = prithvi(
+        checkpoint,
+        output_dim=1,
+        decoder_norm="batch",
+        decoder_padding="same",
+        decoder_activation="relu",
+        decoder_depths=[2, 2, 8, 2],
+        decoder_dims=[160, 320, 640, 1280],
+        freeze_body=True,
+        classifier=False,
+        inference=False,
+    )
+    model.load_state_dict(torch.load(SAVE_PATH / "heatwave" / "best_model_200.pth"))
 
     model = model.to(device)
 
     import utils.dataset.era5_extreme_t2m_dataloader as ext
 
-    heatwave = ext.HeateaveDataloader(batch_size=16,
-                       num_workers=0,
-                       pin_memory=False,
-                       horizon=28,
-                       chip_size=224,
-                       val_ratio=0.5,
-                       data_path='/home/EarthExtreme-Bench/data/weather',
-                       persistent_workers=False)
+    heatwave = ext.HeateaveDataloader(
+        batch_size=16,
+        num_workers=0,
+        pin_memory=False,
+        horizon=28,
+        chip_size=224,
+        val_ratio=0.5,
+        data_path="/home/EarthExtreme-Bench/data/weather",
+        persistent_workers=False,
+    )
 
     train_loader, records = heatwave.train_dataloader()
     val_loader, _ = heatwave.val_dataloader()
 
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
-    best_model_state_dict = train(model, train_loader, val_loader, device, save_path=SAVE_PATH)
+    best_model_state_dict = train(
+        model, train_loader, val_loader, device, save_path=SAVE_PATH
+    )
     # best_model = model
     # checkpoint_trained = torch.load(SAVE_PATH / 'heatwave' / 'best_model.pth')
     msg = model.load_state_dict(best_model_state_dict)
     print(msg)
 
     test_loader, _ = heatwave.test_dataloader()
-    _ = test(model, test_loader, device, stats=records.mean_std_dic, save_path=SAVE_PATH)
-
-
+    _ = test(
+        model, test_loader, device, stats=records.mean_std_dic, save_path=SAVE_PATH
+    )

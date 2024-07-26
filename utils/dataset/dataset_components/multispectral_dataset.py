@@ -1,18 +1,17 @@
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
 import torch
 from PIL import Image
+from config.settings import settings
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 import cv2
-
-from utils import score
+from pathlib import Path
 
 
 class BaseMultispectralDataset(torch.utils.data.Dataset):
@@ -51,55 +50,9 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         self.filenames = self._read_split()  # read train/valid/test splits
 
     def _normalization(self, image):
-        if self.disaster == "fire":
-            img_norm_cfg = dict(
-                means=[
-                    0.033349706741586264,
-                    0.05701185520536176,
-                    0.05889748132001316,
-                    0.2323245113436119,
-                    0.1972854853760658,
-                    0.11944914225186566,
-                ],
-                stds=[
-                    0.02269135568823774,
-                    0.026807560223070237,
-                    0.04004109844362779,
-                    0.07791732423672691,
-                    0.08708738838140137,
-                    0.07241979477437814,
-                ],
-            )
-        elif self.disaster == "flood":
-            img_norm_cfg = dict(
-                means=[
-                    0.23651549,
-                    0.31761484,
-                    0.18514981,
-                    0.26901252,
-                    -14.57879175,
-                    -8.6098158,
-                    -14.29073382,
-                    -8.33534564,
-                ],
-                stds=[
-                    0.16280619,
-                    0.20849304,
-                    0.14008107,
-                    0.19767644,
-                    4.07141682,
-                    3.94773216,
-                    4.21006244,
-                    4.05494136,
-                ],
-            )
-        else:
-            img_norm_cfg = dict(
-                means=[0.485, 0.456, 0.406],
-                stds=[0.229, 0.224, 0.225],
-            )
-        means = np.array(img_norm_cfg["means"])
-        stds = np.array(img_norm_cfg["stds"])
+        key = self.disaster if self.disaster in settings.normalization else "default"
+        means = np.array(settings.normalization[key])
+        stds = np.array(settings.normalization[key])
         image = (image - means[:, None, None]) / stds[:, None, None]
         return image
 
@@ -129,19 +82,18 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         return len(self.filenames)
 
     def __getitem__(self, idx):
+        if self.disaster not in settings.normalization:
+            raise ValueError(f"{self.disaster} is not a valid disaster")
         filename = self.filenames[idx]
-        if self.disaster == "fire":
-            image_path = os.path.join(
-                self.data_path, self.folder, f"{filename}_merged.tif"
-            )
-            mask_path = os.path.join(
-                self.data_path, self.folder, f"{filename}.mask.tif"
-            )
-        elif self.disaster == "flood":
-            image_path = os.path.join(
-                self.data_path, self.folder, f"{filename}_SAR.tif"
-            )
-            mask_path = os.path.join(self.data_path, self.folder, f"{filename}_GT.tif")
+        base_path = Path(self.data_path) / self.folder
+        image_path = (
+            base_path / filename
+            + settings.normalization[self.disaster]["image_file_suffix"]
+        )
+        mask_path = (
+            base_path / filename
+            + settings.normalization[self.disaster]["mask_file_suffix"]
+        )
         with rasterio.open(image_path) as dataset:
             if self.bands is None:
                 image = dataset.read()  # CHW

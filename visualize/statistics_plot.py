@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from brokenaxes import brokenaxes
-from matplotlib.ticker import ScalarFormatter
 
 
 def plotSurfaceVariable(means, stds, name, ylabel, var):

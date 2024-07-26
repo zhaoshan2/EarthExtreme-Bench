@@ -4,8 +4,7 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 from utils import score
-from utils.dataset.dataset_components.multispectral_dataset import \
-    MultispectralDataset
+from utils.dataset.dataset_components.multispectral_dataset import MultispectralDataset
 
 
 class MultiSpectralDataloader:

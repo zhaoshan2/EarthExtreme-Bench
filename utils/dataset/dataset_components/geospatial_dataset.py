@@ -99,7 +99,7 @@ class TorchRandomCrop(object):
 class TorchNormalize(object):
     """Normalize the image.
 
-    It normalises a multichannel image using torch
+    It normalizes a multichannel image using torch
 
     Args:
         mean (sequence): Mean values .

@@ -13,8 +13,7 @@ from transformers import SegformerConfig, SegformerForSemanticSegmentation
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 from torchsummary import summary
 
-from transformers import (ConvNextConfig, UperNetConfig,
-                          UperNetForSemanticSegmentation)
+from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
 
 
 class BaselineNet(nn.Module):

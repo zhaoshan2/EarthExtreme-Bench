@@ -111,8 +111,7 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "fire":
-        from utils.dataset.multispectral_dataloader import \
-            MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset
@@ -168,8 +167,7 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "flood":
-        from utils.dataset.multispectral_dataloader import \
-            MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset

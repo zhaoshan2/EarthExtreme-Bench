@@ -21,14 +21,12 @@ from timm.models.vision_transformer import Block
 # --------------------------------------------------------
 
 
-
-
-
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 from pathlib import Path
 
 from models.model_DecoderUtils import CoreDecoder
 from utils import logging_utils, score
+
 # from einops import rearrange
 from utils.Prithvi_100M_config import data_args, model_args
 

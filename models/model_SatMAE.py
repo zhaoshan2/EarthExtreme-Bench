@@ -5,6 +5,7 @@ from functools import partial
 import timm
 import torch
 import torch.nn as nn
+
 # from models.model_DecoderUtils import CoreDecoder, EncoderBlock
 from model_DecoderUtils import CoreDecoder, EncoderBlock
 from timm.models.vision_transformer import Block, PatchEmbed
@@ -12,8 +13,10 @@ from timm.models.vision_transformer import Block, PatchEmbed
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 # from einops import rearrange
 from utils.Prithvi_100M_config import data_mean, data_std
-from utils.transformer_utils import (get_1d_sincos_pos_embed_from_grid,
-                                     get_2d_sincos_pos_embed)
+from utils.transformer_utils import (
+    get_1d_sincos_pos_embed_from_grid,
+    get_2d_sincos_pos_embed,
+)
 
 # from models.model_CoreCNN import CoreCNNBlock, get_activation
 

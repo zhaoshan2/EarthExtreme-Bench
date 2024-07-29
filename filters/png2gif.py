@@ -21,16 +21,17 @@ def create_gif(root, image_list, gif_name, duration=0.1):
 
 
 def main():
-    DISASTER = "coldwave"
+    DISASTER = "pcp"
     CURR_FOLDER_PATH = Path(__file__).parent
-    OUTPUT_DATA_DIR = (
-        CURR_FOLDER_PATH.parent
-        / "data"
-        / "weather"
-        / f"{DISASTER}-daily"
-        / "2022-0800-MNG"
-        / "PNG"
-    )
+    # OUTPUT_DATA_DIR = (
+    #    CURR_FOLDER_PATH.parent
+    #    / "data"
+    #    / "weather"
+    #    / f"{DISASTER}-daily"
+    #    / "2022-0800-MNG"
+    #    / "PNG"
+    # )
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "imgs"
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):
@@ -44,12 +45,12 @@ def main():
     if DISASTER == "tropicalCyclone":
         filenamelist = sorted(filenamelist, key=lambda x: int(x[29:-4]))
     else:
-        filenamelist = sorted(filenamelist, key=lambda x: int(x[18:-4]))
+        filenamelist = sorted(filenamelist, key=lambda x: int(x[-7:-4]))
     print(filenamelist)
     create_gif(
         OUTPUT_DATA_DIR,
         filenamelist,
-        os.path.join(OUTPUT_DATA_DIR, "animation_t2m.gif"),
+        os.path.join(OUTPUT_DATA_DIR, f"animation_{DISASTER}.gif"),
     )
 
 

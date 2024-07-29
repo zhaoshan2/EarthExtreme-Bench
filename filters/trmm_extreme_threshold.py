@@ -23,6 +23,49 @@ def open_dataset(filepath):
         return None
 
 
+def plot_thresholds(data, i):
+    latitudes = np.linspace(-50, 50, data.shape[0])
+    longitudes = np.linspace(-180, 180, data.shape[1])
+
+    m = Basemap(
+        projection="merc",
+        llcrnrlat=-50,
+        urcrnrlat=50,
+        llcrnrlon=-180,
+        urcrnrlon=180,
+        resolution="c",
+    )
+
+    # Create a meshgrid for latitude and longitude
+    lon, lat = np.meshgrid(longitudes, latitudes)
+    x, y = m(lon, lat)
+
+    # Plot the data
+    plt.figure(figsize=(10, 6))
+    m.drawcoastlines()
+    m.drawcountries()
+    m.drawmapboundary()
+
+    # Plot the data using pcolormesh
+    c_scheme = m.pcolormesh(x, y, data, vmin=0, vmax=55, shading="auto", cmap="RdBu")
+
+    # Add x and y axis labels and ticks
+    # Create integer ticks for longitude
+    long_ticks = np.arange(-180, 181, 30)
+    # Create integer ticks for latitude
+    lat_ticks = np.arange(-50, 51, 20)
+
+    # Set the x ticks with integer longitude values
+    plt.xticks([m(lon, 0)[0] for lon in long_ticks], long_ticks)
+    # Set the y ticks with integer latitude values
+    plt.yticks([m(0, lat)[1] for lat in lat_ticks], lat_ticks)
+
+    # Add a colorbar
+    plt.colorbar(c_scheme, orientation="vertical", fraction=0.016, pad=0.05)
+    plt.title(f"Month {i + 1}")
+    plt.savefig(f"Month {i + 1}.png", dpi=300, bbox_inches="tight", pad_inches=0.01)
+
+
 if __name__ == "__main__":
     """
     To do:
@@ -98,7 +141,8 @@ if __name__ == "__main__":
     trmm = xr.open_dataset(DATA_FOLDER_PATH / "trmm/data_coarsen/trmm_5deg_combined.nc")
     lat = trmm.variables["lat"][:]  # 纬度 20
     lon = trmm.variables["lon"][:]  # 经度 72
-    time = trmm["time"][:]
+    time = trmm["time"][:].values
+
     pcp = trmm.variables["precipitation"]
     pcp = pcp.transpose("time", "lat", "lon")  # switch the dim (lon, lat) to (lat, lon)
     print("dims of precipitation variable:", pcp.dims)
@@ -108,48 +152,98 @@ if __name__ == "__main__":
     n = la * lo
 
     y = 22
-    index_seasons = np.zeros((4, 22), dtype="object")
-    index_seasons[0, 0] = np.arange(0, 59, 1)
-    index_seasons[1, 0] = np.arange(59, 151, 1)
-    index_seasons[2, 0] = np.arange(151, 243, 1)
-    index_seasons[3, 0] = np.arange(243, 334, 1)
-    for i in range(0, y - 1):
-        index_seasons[0, i + 1] = np.arange(334 + 365 * i, 424 + 365 * i, 1)
-        index_seasons[1, i + 1] = np.arange(424 + 365 * i, 516 + 365 * i, 1)
-        index_seasons[2, i + 1] = np.arange(516 + 365 * i, 608 + 365 * i, 1)
-        index_seasons[3, i + 1] = np.arange(608 + 365 * i, 699 + 365 * i, 1)
+    # Options: extract seasonal indices
+    # index_seasons = np.zeros((4, 22), dtype="object")
+    # index_seasons[0, 0] = np.arange(0, 59, 1)
+    # index_seasons[1, 0] = np.arange(59, 151, 1)
+    # index_seasons[2, 0] = np.arange(151, 243, 1)
+    # index_seasons[3, 0] = np.arange(243, 334, 1)
+    # for i in range(0, y - 1):
+    #     index_seasons[0, i + 1] = np.arange(334 + 365 * i, 424 + 365 * i, 1)
+    #     index_seasons[1, i + 1] = np.arange(424 + 365 * i, 516 + 365 * i, 1)
+    #     index_seasons[2, i + 1] = np.arange(516 + 365 * i, 608 + 365 * i, 1)
+    #     index_seasons[3, i + 1] = np.arange(608 + 365 * i, 699 + 365 * i, 1)
+    #
+    # index_season = np.zeros((4), dtype="object")
+    # index_season[0] = np.arange(0, 59, 1)  # winter
+    # index_season[1] = np.arange(59, 151, 1)  # spring
+    # index_season[2] = np.arange(151, 243, 1)  # summer
+    # index_season[3] = np.arange(243, 334, 1)  # fall
+    #
+    # for i in range(0, y - 1):
+    #     index_season[0] = np.concatenate(
+    #         (index_season[0], np.arange(334 + 365 * i, 424 + 365 * i, 1))
+    #     )
+    #     index_season[1] = np.concatenate(
+    #         (index_season[1], np.arange(424 + 365 * i, 516 + 365 * i, 1))
+    #     )
+    #     index_season[2] = np.concatenate(
+    #         (index_season[2], np.arange(516 + 365 * i, 608 + 365 * i, 1))
+    #     )
+    #     index_season[3] = np.concatenate(
+    #         (index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1))
+    #     )
 
-    index_season = np.zeros((4), dtype="object")
-    index_season[0] = np.arange(0, 59, 1)  # winter
-    index_season[1] = np.arange(59, 151, 1)  # spring
-    index_season[2] = np.arange(151, 243, 1)  # summer
-    index_season[3] = np.arange(243, 334, 1)  # fall
+    # for i in range(0, y - 1):
+    #     index_seasons[0, i + 1] = np.arange(334 + 365 * i, 424 + 365 * i, 1)
+    #     index_seasons[1, i + 1] = np.arange(424 + 365 * i, 516 + 365 * i, 1)
+    #     index_seasons[2, i + 1] = np.arange(516 + 365 * i, 608 + 365 * i, 1)
+    #     index_seasons[3, i + 1] = np.arange(608 + 365 * i, 699 + 365 * i, 1)
 
-    for i in range(0, y - 1):
-        index_season[0] = np.concatenate(
-            (index_season[0], np.arange(334 + 365 * i, 424 + 365 * i, 1))
-        )
-        index_season[1] = np.concatenate(
-            (index_season[1], np.arange(424 + 365 * i, 516 + 365 * i, 1))
-        )
-        index_season[2] = np.concatenate(
-            (index_season[2], np.arange(516 + 365 * i, 608 + 365 * i, 1))
-        )
-        index_season[3] = np.concatenate(
-            (index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1))
-        )
+    # index_season = np.zeros((4), dtype="object")
+    # index_season[0] = np.arange(0, 59, 1)  # winter
+    # index_season[1] = np.arange(59, 151, 1)  # spring
+    # index_season[2] = np.arange(151, 243, 1)  # summer
+    # index_season[3] = np.arange(243, 334, 1)  # fall
+
+    # for i in range(0, y - 1):
+    #     index_season[0] = np.concatenate(
+    #         (index_season[0], np.arange(334 + 365 * i, 424 + 365 * i, 1))
+    #     )
+    #     index_season[1] = np.concatenate(
+    #         (index_season[1], np.arange(424 + 365 * i, 516 + 365 * i, 1))
+    #     )
+    #     index_season[2] = np.concatenate(
+    #         (index_season[2], np.arange(516 + 365 * i, 608 + 365 * i, 1))
+    #     )
+    #     index_season[3] = np.concatenate(
+    #         (index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1))
+    #     )
+
+    """
+    Stage 3.2: Extract monthly indices
+    """
+    from datetime import datetime, timedelta
+
+    # # Start date
+    start_date = datetime(1998, 1, 1)
+
+    # # Function to get the corresponding date
+    def get_date(day):
+        return start_date + timedelta(days=int(day))
+
+    # Create a list to store the indices corresponding to each month
+    months_list = [[] for _ in range(12)]
+
+    for day in time:
+        date = get_date(day)  # 1998-01-02
+        month_index = (
+            date.month - 1
+        )  # month_index will be 0 for January, 1 for February, etc.
+        months_list[month_index].append(day)
 
     def ec_wd(ts, perc):
         th = st.scoreatpercentile(ts[ts > 1], perc)
-        if th > 2:
+        if th > 0.1:
             return th
         else:
-            return 0
+            return 0.1
 
-    # for perc in xrange(80, 100):
+    index_season = months_list
+    # # for perc in xrange(80, 100):
     perc = 95
-    for j in [0, 1, 2, 3]:
-        mnoe = index_season[j].shape[0] * (1 - perc / 100.0)
+    for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        mnoe = len(index_season[j]) * (1 - perc / 100.0)
         print(mnoe)
         th = np.zeros((la, lo))
         for l in range(la):
@@ -161,6 +255,64 @@ if __name__ == "__main__":
                 rain[index_season[j], :] = pcp[index_season[j], l, :]
             for k in range(lo):
                 th[l, k] = ec_wd(rain[:, k], perc)
+        # np.save(
+        #     "trmm7_global_wd_score_cor_seasonal_rain_perc%d_season%d" % (perc, j), th
+        # )
         np.save(
-            "trmm7_global_wd_score_cor_seasonal_rain_perc%d_season%d" % (perc, j), th
+            "trmm7_global_wd_score_cor_seasonal_rain_perc%d_month%d" % (perc, j + 1), th
         )
+    """
+    Stage 4: visualize the extracted thresholds
+    """
+    from mpl_toolkits.basemap import Basemap
+    import matplotlib.pyplot as plt
+
+    for i in range(12):
+        data = np.load(
+            f"thresholds_months/trmm7_global_wd_score_cor_seasonal_rain_perc95_month{i+1}.npy"
+        )
+        plot_thresholds(data, i)
+
+    """
+    Stage 5: filter the frames to remove some redundant frames 
+    """
+    files = []
+    for year in range(2020, 2024):
+        for month in range(1, 13):
+            file_path = f"crops_txt/imerg_rain_perc95_{year}_month{month:02}.txt"
+            with open(file_path, "r") as file:
+                for line in file.readlines():
+                    files.append(line.strip())
+    # Set to keep track of unique entries
+    unique_entries = set()
+
+    # List to store the final results
+    filtered_files = []
+
+    # Process each file entry
+    for file in files:
+        # Extract parts of the file entry
+        parts = file.strip("()").split(", ")
+        date = parts[0].split("-")[0].strip("'")  # Get the date part
+        size = parts[1]  # Get the size part
+        count = parts[2]  # Get the count part
+
+        # Create a tuple of (date, size, count)
+        entry = (date, size, count)
+
+        # Check if this entry is unique
+        if entry not in unique_entries:
+            unique_entries.add(entry)
+            filtered_files.append(f"('{date}', {size}, {count})")
+
+    # Print the result
+    print(filtered_files)
+    # Define the output file path
+    output_file_path = "crops_txt/filtered.txt"
+
+    # Write the results to the file
+    with open(output_file_path, "w") as file:
+        for line in filtered_files:
+            file.write(line + "\n")
+
+    print(f"Filtered results have been saved to {output_file_path}")

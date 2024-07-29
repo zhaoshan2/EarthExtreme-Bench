@@ -503,10 +503,10 @@ if __name__ == "__main__":
                 output_names.append(filename[:-8] + "_GT.tif")
     import csv
 
-    with open("validation_index.csv", mode="w", newline="") as file:
-        writer = csv.writer(file)
-        for item1, item2 in zip(input_names, output_names):
-            writer.writerow([item1, item2])
+    # with open("validation_index.csv", mode="w", newline="") as file:
+    #     writer = csv.writer(file)
+    #     for item1, item2 in zip(input_names, output_names):
+    #         writer.writerow([item1, item2])
 
     """
     installation error 

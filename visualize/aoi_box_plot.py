@@ -28,6 +28,8 @@ def plot_aoi(path, color, m):
 if __name__ == "__main__":
 
     # Create a figure and axis
+    """
+
     fig = plt.figure(figsize=(12, 6))
 
     # Create a Basemap instance for a global map
@@ -40,8 +42,8 @@ if __name__ == "__main__":
     m.drawmapboundary(fill_color="lightgrey")
     m.drawcountries(color="lightgrey")
     # # draw parallels and meridians.
-    m.drawparallels(np.arange(-90.0, 120.0, 30.0), color="grey")
-    m.drawmeridians(np.arange(0.0, 360.0, 60.0), color="grey")
+    # m.drawparallels(np.arange(-90.0, 120.0, 30.0), color="grey")
+    # m.drawmeridians(np.arange(0, 360.0, 60.0), color="grey")
     # Add a shaded relief image
     # m.shadedrelief()
     # m.etopo()
@@ -51,11 +53,12 @@ if __name__ == "__main__":
 
     m.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=10, color="grey")
     m.drawmeridians(meridians, labels=[0, 0, 0, 1], fontsize=10, color="grey")
-
-    CURR_FOLDER_PATH = (
-        Path(__file__).parent.parent.parent
-        / "data_storage_home/data/disaster/output_csv"
-    )
+    """
+    # CURR_FOLDER_PATH = (
+    #    Path(__file__).parent.parent.parent
+    #    / "data_storage_home/data/disaster/output_csv"
+    # )
+    CURR_FOLDER_PATH = Path(__file__).parent
     """
     # Flood 17 sites
     """
@@ -100,21 +103,21 @@ if __name__ == "__main__":
     # x = [lon_min, lon_max, lon_max, lon_min, lon_min]
     # y = [lat_min, lat_min, lat_max, lat_max, lat_min]
     # m.plot(x, y, marker=None, color='r', linewidth=2)
-    # Extreme precipitation, Italy
-    DISASTER = "storm"
-    latitu, lontitu = 46.4883, 11.2106
+    ## Extreme precipitation, Italy
+    # DISASTER = "storm"
+    # latitu, lontitu = 46.4883, 11.2106
     # lon_min, lon_max, lat_min, lat_max = 6.4, 16.1, 45.4, 47.6
     # x = [lon_min, lon_max, lon_max, lon_min, lon_min]
     # y = [lat_min, lat_min, lat_max, lat_max, lat_min]
-    x, y = m(lontitu, latitu)
-    m.plot(x, y, marker="o", color="red", linewidth=10)
+    # x, y = m(lontitu, latitu)
+    # m.plot(x, y, marker="o", color="red", linewidth=10)
     # Tropical cyclones, tropics
     # lon_min, lon_max, lat_min, lat_max = -179, 179, -40, 60
     # x = [lon_min, lon_max, lon_max, lon_min, lon_min]
     # y = [lat_min, lat_min, lat_max, lat_max, lat_min]
     # m.plot(x, y, linestyle='--', color='orange', linewidth=2)
     # # Add title and show the plot
-    plt.savefig(f"figures/{DISASTER}.png", dpi=300)
+    # plt.savefig(f"figures/{DISASTER}.png", dpi=300)
 
     """
     contiguous United States
@@ -155,3 +158,94 @@ if __name__ == "__main__":
     # gl.xformatter = LONGITUDE_FORMATTER
     # gl.yformatter = LATITUDE_FORMATTER
     # plt.savefig(f"figures/{DISASTER}.png", dpi=300)
+
+    # DISASTER = "storm"
+    # latitu, lontitu = 46.4883, 11.2106
+    # lon_min, lon_max, lat_min, lat_max = 6.4, 16.1, 45.4, 47.6
+    # x = [lon_min, lon_max, lon_max, lon_min, lon_min]
+    # y = [lat_min, lat_min, lat_max, lat_max, lat_min]
+    # x, y = m(lontitu, latitu)
+    # m.plot(x, y, marker="o", color="red", linewidth=10)
+    # Tropical cyclones, tropics
+    # lon_min, lon_max, lat_min, lat_max = -179, 179, -40, 60
+    # x = [lon_min, lon_max, lon_max, lon_min, lon_min]
+    # y = [lat_min, lat_min, lat_max, lat_max, lat_min]
+    # m.plot(x, y, linestyle='--', color='orange', linewidth=2)
+    # # Add title and show the plot
+    # plt.savefig(f"figures/{DISASTER}.png", dpi=300)
+
+    import h5py
+    import re
+
+    DISASTER = "extremepcp"
+
+    OUTPUT_DATA_DIR = (
+        CURR_FOLDER_PATH.parent / "data" / "weather" / f"{DISASTER}-30minutes"
+    )
+    print("OUTPUT_DATA_DIR", OUTPUT_DATA_DIR)
+
+    ax = plt.axes(projection=ccrs.Robinson())
+
+    ax.add_feature(cfeature.BORDERS, edgecolor="lightgrey")
+    ax.add_feature(cfeature.LAND, facecolor="white")
+    ax.add_feature(cfeature.OCEAN, edgecolor="lightgrey", facecolor="lightgrey")
+    for root, _, filenames in os.walk(OUTPUT_DATA_DIR):
+        for filename in filenames:
+            if filename.endswith(".hdf5"):
+                file_path = os.path.join(root, filename)
+                with h5py.File(file_path, "r") as file:
+                    precipitation = file["precipitation"][52]
+
+                match = re.match(r"(\d+)_(\d+)_(\d+)\.hdf5", filename)
+
+                if match:
+                    lat = int(match.group(2))
+                    lon = int(match.group(3))
+
+                    lat_min, lat_max = (
+                        90 - lat * 0.1,
+                        90 - 0.1 * lat + 5,
+                    )
+                    lon_min, lon_max = (
+                        lon * 0.1 - 180,
+                        lon * 0.1 - 180 + 5,
+                    )
+                    print("lon_min", lon_min)
+
+                    # latitudes = np.linspace(lat_min, lat_max, 50)
+                    # print(latitudes)
+
+                    # longitudes = np.linspace(lon_min, lon_max, 50)
+                    # lon, lat = np.meshgrid(longitudes, latitudes)
+
+                    # m.contourf(lon, lat, precipitation)
+
+                    lon1, lat1 = lon_min, lat_max
+                    lon2, lat2 = lon_min, lat_min
+                    lon3, lat3 = lon_max, lat_min
+                    lon4, lat4 = lon_max, lat_max
+
+                    aoi_coords = [
+                        (lon_min, lat_min),
+                        (lon_min, lat_max),
+                        (lon_max, lat_max),
+                        (lon_max, lat_min),
+                        (lon_min, lat_min),
+                    ]
+
+                    aoi_polygon = Polygon(aoi_coords)
+                    ax.add_geometries(
+                        [aoi_polygon],
+                        crs=ccrs.PlateCarree(),
+                        edgecolor="lightblue",
+                        facecolor="blue",
+                        hatch="//",
+                        linewidth=2,
+                    )
+    gl = ax.gridlines(draw_labels=True)
+    gl.top_labels = False
+    gl.right_labels = False
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+
+    plt.savefig(f"figures/{DISASTER}.png", dpi=300)

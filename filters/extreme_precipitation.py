@@ -17,9 +17,10 @@ DATA_FOLDER_PATH = (
 )
 INPUT_CSV_PATH = DATA_FOLDER_PATH / "input_csv" / "tassrad19_metadata.csv"
 OUTPUT_FOLDER = DATA_FOLDER_PATH / "output_csv"
-DISASTER = "storm"
+DISASTER = "pcp"
 if __name__ == "__main__":
-
+    """
+    # Italy Radar
     rainfalls = pd.read_csv(INPUT_CSV_PATH, encoding="unicode_escape")
 
     print(f"In total {rainfalls.shape[0]} rainfalls")
@@ -91,3 +92,50 @@ if __name__ == "__main__":
     # all_data = h5py.File(os.path.join(OUTPUT_DATA_DIR, "all_data_storm.hdf5"), 'r', libver='latest')
     # for i, v in all_data.items():
     #     print(i, v)
+    """
+    # IMERG Satellites
+    storm_path = CURR_FOLDER_PATH / "hdf_crops_n" / "pcp_metadata_2020to2023.csv"
+
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "hdf_crops_n"
+    # Data path of the storm sequences
+
+    metadata = pd.read_csv(storm_path, index_col="id")
+
+    run_n = len(metadata)
+
+    num = 0
+    with h5py.File(
+        os.path.join(OUTPUT_DATA_DIR, f"all_imerg_{DISASTER}.hdf5"),
+        "w",
+        libver="latest",
+    ) as hdf_archive:
+
+        for idx in range(run_n):
+            record = metadata.loc[idx]
+
+            date_string = record["start_datetime"]
+            start_lat = int(record["start_lat"])
+            start_lon = int(record["start_lon"])
+            date_object = datetime.strptime(date_string, "%m/%d/%Y")
+            date_str = date_object.strftime(
+                f"%Y%m%d_{start_lat:04}_{start_lon:04}.hdf5"
+            )
+            assert os.path.exists(
+                os.path.join(OUTPUT_DATA_DIR, date_str)
+            ), f"The linked file {os.path.join(OUTPUT_DATA_DIR, date_str)} doesn't exsit!"
+
+            hdf_archive[str(idx)] = h5py.ExternalLink(
+                os.path.join(OUTPUT_DATA_DIR, date_str), "precipitation"
+            )
+            assert os.path.exists(os.path.join(OUTPUT_DATA_DIR, date_str))
+
+            hdf_archive.flush()
+
+    # Check the file links
+    all_data = h5py.File(
+        os.path.join(OUTPUT_DATA_DIR, f"all_imerg_{DISASTER}.hdf5"),
+        "r",
+        libver="latest",
+    )
+    for i, v in all_data.items():
+        print(i, v)

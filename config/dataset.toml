@@ -1,4 +1,4 @@
-[[normalization.fire]]
+[normalization.fire]
 means=[0.033349706741586264,
        0.05701185520536176,
        0.05889748132001316,
@@ -16,7 +16,7 @@ stds=[0.02269135568823774,
 image_file_suffix = "_merged.tif"
 mask_file_suffix = ".mask.tif"
 
-[[normalization.flood]]
+[normalization.flood]
 means=[0.23651549,
        0.31761484,
        0.18514981,
@@ -38,6 +38,6 @@ stds=[0.16280619,
 image_file_suffix = "_SAR.tif"
 mask_file_suffix = "_GT.tif"
 
-[[normalization.default]]
+[normalization.default]
 means=[0.485, 0.456, 0.406]
 stds=[0.229, 0.224, 0.225]

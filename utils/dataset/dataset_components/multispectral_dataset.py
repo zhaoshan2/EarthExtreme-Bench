@@ -1,17 +1,16 @@
 import os
 import sys
+from pathlib import Path
 from typing import Dict
 
+import cv2
 import numpy as np
 import pandas as pd
 import rasterio
 import torch
 from PIL import Image
-from config.settings import settings
 
-sys.path.insert(0, "/home/EarthExtreme-Bench")
-import cv2
-from pathlib import Path
+from config.settings import settings
 
 
 class BaseMultispectralDataset(torch.utils.data.Dataset):

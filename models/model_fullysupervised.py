@@ -1,14 +1,10 @@
-import sys
-
-import torch
-
-sys.path.insert(0, "/home/EarthExtreme-Bench")
 import argparse
 import os
 import random
 from pathlib import Path
 
 import numpy as np
+import torch
 from model_Baseline_vision import BaselineNet
 
 
@@ -111,7 +107,8 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "fire":
-        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import \
+            MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset
@@ -167,7 +164,8 @@ if __name__ == "__main__":
         )
 
     elif args.disaster == "flood":
-        from utils.dataset.multispectral_dataloader import MultiSpectralDataloader
+        from utils.dataset.multispectral_dataloader import \
+            MultiSpectralDataloader
         from utils.trainer.multispectral_train_and_test import test, train
 
         # dataset

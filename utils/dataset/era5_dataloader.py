@@ -1,16 +1,7 @@
-import sys
-
-sys.path.insert(0, "/home/EarthExtreme-Bench")
-
 import torch
 from torch.utils.data import DataLoader
-from enum import Enum
 
-
-class DataLoaderType(str, Enum):
-    TRAIN = "train"
-    VAL = "val"
-    TEST = "test"
+from schema.data_loader import DataLoaderType
 
 
 class DataPrefetcher:
@@ -90,11 +81,10 @@ class ERA5Dataloader:
         shuffle: bool = False,
         drop_last: bool = False,
     ):
+        from utils.dataset.dataset_components.era5_cyclone_dataset import \
+            TCDataset
         from utils.dataset.dataset_components.era5_extreme_temperature_dataset import (
-            Era5ColdWave,
-            Era5HeatWave,
-        )
-        from utils.dataset.dataset_components.era5_cyclone_dataset import TCDataset
+            Era5ColdWave, Era5HeatWave)
 
         disasters = {
             "heatwave": Era5HeatWave,

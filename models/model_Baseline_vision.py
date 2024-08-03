@@ -1,19 +1,9 @@
-import json
-import math
-import sys
-
-import timm
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from huggingface_hub import hf_hub_download
 
-from transformers import SegformerConfig, SegformerForSemanticSegmentation
-
-sys.path.insert(0, "/home/EarthExtreme-Bench")
-from torchsummary import summary
-
-from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+from transformers import (ConvNextConfig, SegformerConfig,
+                          SegformerForSemanticSegmentation, UperNetConfig,
+                          UperNetForSemanticSegmentation)
 
 
 class BaselineNet(nn.Module):

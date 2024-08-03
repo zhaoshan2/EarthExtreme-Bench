@@ -1,10 +1,9 @@
-import sys
-
 from torch.utils.data import DataLoader
 
-sys.path.insert(0, "/home/EarthExtreme-Bench")
+from schema.data_loader import DataLoaderType
 from utils import score
-from utils.dataset.dataset_components.multispectral_dataset import MultispectralDataset
+from utils.dataset.dataset_components.multispectral_dataset import \
+    MultispectralDataset
 
 
 class MultiSpectralDataloader:
@@ -31,10 +30,10 @@ class MultiSpectralDataloader:
         self.transform = transform
         self.disaster = disaster
 
-    def train_dataloader(self):
-        data_train = MultispectralDataset(
+    def get_multi_spectral_dataset(self, mode: DataLoaderType):
+        return MultispectralDataset(
             data_path=self.data_path,
-            split="train",
+            split=mode.value,
             val_ratio=self.val_ratio,
             chip_size=self.chip_size,
             bands=None,
@@ -42,8 +41,9 @@ class MultiSpectralDataloader:
             disaster=self.disaster,
         )
 
+    def train_dataloader(self):
         return DataLoader(
-            dataset=data_train,
+            dataset=self.get_multi_spectral_dataset(DataLoaderType.TRAIN),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -53,18 +53,8 @@ class MultiSpectralDataloader:
         )
 
     def val_dataloader(self):
-        data_val = MultispectralDataset(
-            data_path=self.data_path,
-            split="val",
-            val_ratio=self.val_ratio,
-            chip_size=self.chip_size,
-            bands=None,
-            transform=self.transform,
-            disaster=self.disaster,
-        )
-
         return DataLoader(
-            dataset=data_val,
+            dataset=self.get_multi_spectral_dataset(DataLoaderType.VAL),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -74,18 +64,8 @@ class MultiSpectralDataloader:
         )
 
     def test_dataloader(self):
-        data_test = MultispectralDataset(
-            data_path=self.data_path,
-            split="test",
-            val_ratio=self.val_ratio,
-            chip_size=self.chip_size,
-            bands=None,
-            transform=self.transform,
-            disaster=self.disaster,
-        )
-
         return DataLoader(
-            dataset=data_test,
+            dataset=self.get_multi_spectral_dataset(DataLoaderType.TEST),
             batch_size=1,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,

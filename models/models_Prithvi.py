@@ -2,8 +2,7 @@
 # All rights reserved.
 import json
 import os
-import sys
-from functools import partial
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +10,11 @@ import torch
 import torch.nn as nn
 from timm.models.layers import to_2tuple
 from timm.models.vision_transformer import Block
+
+from models.model_DecoderUtils import CoreDecoder
+from utils import logging_utils, score
+# from einops import rearrange
+from utils.Prithvi_100M_config import data_args, model_args
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -21,14 +25,8 @@ from timm.models.vision_transformer import Block
 # --------------------------------------------------------
 
 
-sys.path.insert(0, "/home/EarthExtreme-Bench")
-from pathlib import Path
 
-from models.model_DecoderUtils import CoreDecoder
-from utils import logging_utils, score
 
-# from einops import rearrange
-from utils.Prithvi_100M_config import data_args, model_args
 
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):

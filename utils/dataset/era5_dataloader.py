@@ -1,11 +1,16 @@
 import sys
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
-import os
-from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+from enum import Enum
+
+
+class DataLoaderType(str, Enum):
+    TRAIN = "train"
+    VAL = "val"
+    TEST = "test"
 
 
 class DataPrefetcher:
@@ -70,143 +75,52 @@ class ERA5Dataloader:
         self.disaster = disaster
 
     def train_dataloader(self):
-        if self.disaster == "heatwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
-
-            data_train = da.Era5HeatWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="train",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "coldwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
-
-            data_train = da.Era5ColdWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="train",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "tropical cyclone":
-            import utils.dataset.dataset_components.era5_cyclone_dataset as da
-
-            data_train = da.TCDataset(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="train",
-                val_ratio=self.val_ratio,
-            )
-        else:
-            raise Exception("Sorry, the disaster is not included")
-        return (
-            DataLoader(
-                dataset=data_train,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                pin_memory=self.pin_memory,
-                shuffle=False,
-                persistent_workers=self.persistent_workers,
-                drop_last=False,
-            ),
-            data_train.records,
-        )
+        return self.get_data_loader(DataLoaderType.TRAIN, batch_size=self.batch_size)
 
     def val_dataloader(self):
-        if self.disaster == "heatwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
-
-            data_val = da.Era5HeatWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="val",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "coldwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
-
-            data_val = da.Era5ColdWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="val",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "tropical cyclone":
-            import utils.dataset.dataset_components.era5_cyclone_dataset as da
-
-            data_val = da.TCDataset(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="val",
-                val_ratio=self.val_ratio,
-            )
-        else:
-            raise Exception("Sorry, the disaster is not included")
-
-        return (
-            DataLoader(
-                dataset=data_val,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                pin_memory=self.pin_memory,
-                shuffle=False,
-                persistent_workers=self.persistent_workers,
-                drop_last=False,
-            ),
-            data_val.records,
-        )
+        return self.get_data_loader(DataLoaderType.VAL, batch_size=self.batch_size)
 
     def test_dataloader(self):
-        if self.disaster == "heatwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+        return self.get_data_loader(DataLoaderType.TEST, batch_size=1)
 
-            data_test = da.Era5HeatWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="test",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "coldwave":
-            import utils.dataset.dataset_components.era5_extreme_temperature_dataset as da
+    def get_data_loader(
+        self,
+        data_loader_type: DataLoaderType,
+        batch_size: int,
+        shuffle: bool = False,
+        drop_last: bool = False,
+    ):
+        from utils.dataset.dataset_components.era5_extreme_temperature_dataset import (
+            Era5ColdWave,
+            Era5HeatWave,
+        )
+        from utils.dataset.dataset_components.era5_cyclone_dataset import TCDataset
 
-            data_test = da.Era5ColdWave(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="test",
-                val_ratio=self.val_ratio,
-            )
-        elif self.disaster == "tropical cyclone":
-            import utils.dataset.dataset_components.era5_cyclone_dataset as da
-
-            data_test = da.TCDataset(
-                horizon=self.horizon,
-                chip_size=self.chip_size,
-                data_path=self.data_path,
-                split="test",
-                val_ratio=self.val_ratio,
-            )
-        else:
-            raise Exception("Sorry, the disaster is not included")
-
+        disasters = {
+            "heatwave": Era5HeatWave,
+            "coldwave": Era5ColdWave,
+            "tropical cyclone": TCDataset,
+        }
+        if self.disaster not in disasters:
+            raise ValueError(f"{self.disaster} is not a valid disaster")
+        dataset = disasters[self.disaster](
+            horizon=self.horizon,
+            chip_size=self.chip_size,
+            data_path=self.data_path,
+            split=data_loader_type.value,
+            val_ratio=self.val_ratio,
+        )
         return (
             DataLoader(
-                dataset=data_test,
-                batch_size=1,
+                dataset=dataset,
+                batch_size=batch_size,
                 num_workers=self.num_workers,
                 pin_memory=self.pin_memory,
-                shuffle=False,
+                shuffle=shuffle,
                 persistent_workers=self.persistent_workers,
-                drop_last=False,
+                drop_last=drop_last,
             ),
-            data_test.records,
+            dataset.records,
         )
 
 

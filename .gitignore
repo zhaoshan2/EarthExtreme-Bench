@@ -167,3 +167,6 @@ __init__.py
 *.out
 *.txt
 *.npy
+filters/crops_daily_txt
+filters/hdf_crops_daily
+visualize/figures

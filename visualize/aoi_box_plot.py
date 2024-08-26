@@ -184,68 +184,152 @@ if __name__ == "__main__":
     )
     print("OUTPUT_DATA_DIR", OUTPUT_DATA_DIR)
 
-    ax = plt.axes(projection=ccrs.Robinson())
+    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.set_extent([-180, 180, -50, 50], crs=ccrs.PlateCarree())
 
     ax.add_feature(cfeature.BORDERS, edgecolor="lightgrey")
     ax.add_feature(cfeature.LAND, facecolor="white")
     ax.add_feature(cfeature.OCEAN, edgecolor="lightgrey", facecolor="lightgrey")
-    for root, _, filenames in os.walk(OUTPUT_DATA_DIR):
-        for filename in filenames:
-            if filename.endswith(".hdf5"):
-                file_path = os.path.join(root, filename)
-                with h5py.File(file_path, "r") as file:
-                    precipitation = file["precipitation"][52]
+    # for root, _, filenames in os.walk(OUTPUT_DATA_DIR):
+    #     for filename in filenames:
+    #         if filename.endswith(".hdf5"):
+    #             file_path = os.path.join(root, filename)
+    #             with h5py.File(file_path, "r") as file:
+    #                 precipitation = file["precipitation"][52]
+    #
+    #             match = re.match(r"(\d+)_(\d+)_(\d+)\.hdf5", filename)
+    #
+    #             if match:
+    #                 lat = int(match.group(2))
+    #                 lon = int(match.group(3))
+    #                 lat_min, lat_max = (
+    #                     90 - lat * 0.1,
+    #                     90 - 0.1 * lat + 5,
+    #                 )
+    #                 lon_min, lon_max = (
+    #                     lon * 0.1 - 180,
+    #                     lon * 0.1 - 180 + 5,
+    #                 )
+    #                 print("lon_min", lon_min)
+    #
+    #                 # latitudes = np.linspace(lat_min, lat_max, 50)
+    #                 # print(latitudes)
+    #
+    #                 # longitudes = np.linspace(lon_min, lon_max, 50)
+    #                 # lon, lat = np.meshgrid(longitudes, latitudes)
+    #
+    #                 # m.contourf(lon, lat, precipitation)
+    #
+    #                 lon1, lat1 = lon_min, lat_max
+    #                 lon2, lat2 = lon_min, lat_min
+    #                 lon3, lat3 = lon_max, lat_min
+    #                 lon4, lat4 = lon_max, lat_max
+    #
+    #                 aoi_coords = [
+    #                     (lon_min, lat_min),
+    #                     (lon_min, lat_max),
+    #                     (lon_max, lat_max),
+    #                     (lon_max, lat_min),
+    #                     (lon_min, lat_min),
+    #                 ]
+    #
+    #                 aoi_polygon = Polygon(aoi_coords)
+    #                 ax.add_geometries(
+    #                     [aoi_polygon],
+    #                     crs=ccrs.PlateCarree(),
+    #                     edgecolor="lightblue",
+    #                     facecolor="blue",
+    #                     hatch="//",
+    #                     linewidth=2,
+    #                 )
+    records = []
+    total_lines = []
+    for year in ["2020", "2021", "2022", "2023"]:
+        with open(
+            f"../filters/crops_daily_txt/imerg_rain_perc95_{year}_3days.txt", "r"
+        ) as file:
+            lines = file.readlines()
+            total_lines.extend(lines)
 
-                match = re.match(r"(\d+)_(\d+)_(\d+)\.hdf5", filename)
+    dates = []
+    lats = []
+    lons = []
 
-                if match:
-                    lat = int(match.group(2))
-                    lon = int(match.group(3))
+    for line in total_lines:
+        # Extract the latitude
+        lat = line.split("Lat: ")[1].split(",")[0].strip()
 
-                    lat_min, lat_max = (
-                        90 - lat * 0.1,
-                        90 - 0.1 * lat + 5,
-                    )
-                    lon_min, lon_max = (
-                        lon * 0.1 - 180,
-                        lon * 0.1 - 180 + 5,
-                    )
-                    print("lon_min", lon_min)
+        # Extract the longitude
+        lon = line.split("Lon: ")[1].split(",")[0].strip()
 
-                    # latitudes = np.linspace(lat_min, lat_max, 50)
-                    # print(latitudes)
+        # Extract the dates list
+        dates_str = line.split("Dates: ")[1].strip()
+        # Only plot the JJA:
+        months = dates_str[
+            6:8
+        ]  # Convert the string representation of the list to an actual list
 
-                    # longitudes = np.linspace(lon_min, lon_max, 50)
-                    # lon, lat = np.meshgrid(longitudes, latitudes)
+        if months in ["06", "07", "08"]:
+            lats.append(eval(lat))
+            lons.append(eval(lon))
+    print(lats)
+    for lat, lon in zip(lats, lons):
 
-                    # m.contourf(lon, lat, precipitation)
+        lat_min, lat_max = (
+            90 - (lat * 0.1 + 40),
+            90 - (lat * 0.1 + 40 + 5),
+        )
 
-                    lon1, lat1 = lon_min, lat_max
-                    lon2, lat2 = lon_min, lat_min
-                    lon3, lat3 = lon_max, lat_min
-                    lon4, lat4 = lon_max, lat_max
+        lon_min, lon_max = (
+            lon * 0.1 - 180,
+            lon * 0.1 - 180 + 5,
+        )
+        # or
+        # lat_min, lat_max = (
+        #     lat,
+        #     lat + 5,
+        # )
+        # lon_min, lon_max = (
+        #     lon,
+        #     lon + 5,
+        # )
 
-                    aoi_coords = [
-                        (lon_min, lat_min),
-                        (lon_min, lat_max),
-                        (lon_max, lat_max),
-                        (lon_max, lat_min),
-                        (lon_min, lat_min),
-                    ]
+        # latitudes = np.linspace(lat_min, lat_max, 50)
+        # print(latitudes)
 
-                    aoi_polygon = Polygon(aoi_coords)
-                    ax.add_geometries(
-                        [aoi_polygon],
-                        crs=ccrs.PlateCarree(),
-                        edgecolor="lightblue",
-                        facecolor="blue",
-                        hatch="//",
-                        linewidth=2,
-                    )
+        # longitudes = np.linspace(lon_min, lon_max, 50)
+        # lon, lat = np.meshgrid(longitudes, latitudes)
+
+        # m.contourf(lon, lat, precipitation)
+
+        lon1, lat1 = lon_min, lat_max
+        lon2, lat2 = lon_min, lat_min
+        lon3, lat3 = lon_max, lat_min
+        lon4, lat4 = lon_max, lat_max
+
+        aoi_coords = [
+            (lon_min, lat_min),
+            (lon_min, lat_max),
+            (lon_max, lat_max),
+            (lon_max, lat_min),
+            (lon_min, lat_min),
+        ]
+
+        aoi_polygon = Polygon(aoi_coords)
+        ax.add_geometries(
+            [aoi_polygon],
+            crs=ccrs.PlateCarree(),
+            edgecolor="lightblue",
+            facecolor="blue",
+            alpha=0.5,
+            hatch="//",
+            linewidth=2,
+        )
+
     gl = ax.gridlines(draw_labels=True)
     gl.top_labels = False
     gl.right_labels = False
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
 
-    plt.savefig(f"figures/{DISASTER}.png", dpi=300)
+    plt.savefig(f"figures/{DISASTER}_year{year}_3days.png", dpi=300)

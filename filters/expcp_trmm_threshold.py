@@ -62,8 +62,8 @@ def plot_thresholds(data, i):
 
     # Add a colorbar
     plt.colorbar(c_scheme, orientation="vertical", fraction=0.016, pad=0.05)
-    plt.title(f"Month {i + 1}")
-    plt.savefig(f"Month {i + 1}.png", dpi=300, bbox_inches="tight", pad_inches=0.01)
+    plt.title(f"Season {i}")
+    plt.savefig(f"Season {i}.png", dpi=300, bbox_inches="tight", pad_inches=0.01)
 
 
 if __name__ == "__main__":
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     #         del ds_coarse[var].encoding['preferred_chunks']
     # ds_coarse.chunk(chunk_dict).to_netcdf(ds_coarse_path)
     """
-    Stage 2
+    Stage 2     ## Combine yearly data into a single file
     """
     # years = ["1998"]
     # for year in years:
@@ -130,13 +130,14 @@ if __name__ == "__main__":
     #     except Exception as e:
     #         print(f"An error occurred: {e}")
     # print("All files saved successfully")
-    ## Combine yearly data into a single file
 
     """
     Stage 3
     """
     import numpy as np
     import scipy.stats as st
+
+    """
 
     trmm = xr.open_dataset(DATA_FOLDER_PATH / "trmm/data_coarsen/trmm_5deg_combined.nc")
     lat = trmm.variables["lat"][:]  # 纬度 20
@@ -209,9 +210,10 @@ if __name__ == "__main__":
     #     index_season[3] = np.concatenate(
     #         (index_season[3], np.arange(608 + 365 * i, 699 + 365 * i, 1))
     #     )
-
+    """
     """
     Stage 3.2: Extract monthly indices
+    """
     """
     from datetime import datetime, timedelta
 
@@ -241,7 +243,7 @@ if __name__ == "__main__":
 
     index_season = months_list
     # # for perc in xrange(80, 100):
-    perc = 95
+    perc = 80
     for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
         mnoe = len(index_season[j]) * (1 - perc / 100.0)
         print(mnoe)
@@ -259,60 +261,20 @@ if __name__ == "__main__":
         #     "trmm7_global_wd_score_cor_seasonal_rain_perc%d_season%d" % (perc, j), th
         # )
         np.save(
-            "trmm7_global_wd_score_cor_seasonal_rain_perc%d_month%d" % (perc, j + 1), th
+            "thresholds_months/trmm7_global_wd_score_cor_seasonal_rain_perc%d_month%d"
+            % (perc, j + 1),
+            th,
         )
+    """
     """
     Stage 4: visualize the extracted thresholds
     """
+
     from mpl_toolkits.basemap import Basemap
     import matplotlib.pyplot as plt
 
-    for i in range(12):
+    for i in range(4):
         data = np.load(
-            f"thresholds_months/trmm7_global_wd_score_cor_seasonal_rain_perc95_month{i+1}.npy"
+            f"thresholds_seasons/trmm7_global_wd_score_cor_seasonal_rain_perc95_season{i}.npy"
         )
         plot_thresholds(data, i)
-
-    """
-    Stage 5: filter the frames to remove some redundant frames 
-    """
-    files = []
-    for year in range(2020, 2024):
-        for month in range(1, 13):
-            file_path = f"crops_txt/imerg_rain_perc95_{year}_month{month:02}.txt"
-            with open(file_path, "r") as file:
-                for line in file.readlines():
-                    files.append(line.strip())
-    # Set to keep track of unique entries
-    unique_entries = set()
-
-    # List to store the final results
-    filtered_files = []
-
-    # Process each file entry
-    for file in files:
-        # Extract parts of the file entry
-        parts = file.strip("()").split(", ")
-        date = parts[0].split("-")[0].strip("'")  # Get the date part
-        size = parts[1]  # Get the size part
-        count = parts[2]  # Get the count part
-
-        # Create a tuple of (date, size, count)
-        entry = (date, size, count)
-
-        # Check if this entry is unique
-        if entry not in unique_entries:
-            unique_entries.add(entry)
-            filtered_files.append(f"('{date}', {size}, {count})")
-
-    # Print the result
-    print(filtered_files)
-    # Define the output file path
-    output_file_path = "crops_txt/filtered.txt"
-
-    # Write the results to the file
-    with open(output_file_path, "w") as file:
-        for line in filtered_files:
-            file.write(line + "\n")
-
-    print(f"Filtered results have been saved to {output_file_path}")

@@ -180,7 +180,7 @@ def main(filepath):
 
     if len(seq_start_dates) == len(frames) == len(means):
         # Define the file path
-        csv_file_path = "pcp_daily_metadata.csv"
+        csv_file_path = f"pcp_daily_metadata_year{year}.csv"
 
         # Write the lists to the CSV file
         with open(csv_file_path, mode="w", newline="") as file:
@@ -215,5 +215,6 @@ def main(filepath):
 if __name__ == "__main__":
     CURR_FOLDER_PATH = Path(__file__).parent
     DATA_FOLDER_PATH = CURR_FOLDER_PATH.parent.parent / "data_storage_home"
-    filepath = "../filters/crops_daily_txt/imerg_rain_perc95_2020_3days.txt"
+    year = 2023
+    filepath = f"../filters/crops_daily_txt/imerg_rain_perc95_{year}_3days.txt"
     main(filepath)

@@ -1,7 +1,9 @@
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Dict
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,9 +12,7 @@ import torch
 from PIL import Image
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
-import cv2
-
-from utils import score
+from config.settings import settings
 
 
 class BaseMultispectralDataset(torch.utils.data.Dataset):
@@ -28,120 +28,65 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        data_path,
         split="train",
-        val_ratio: float = 0.1,
         bands: str = None,
-        chip_size: int = 256,
-        transform=None,
         disaster="fire",
     ):
 
         assert split in {"train", "val", "test"}
         self.split = split
         self.folder = "training" if split in {"train", "val"} else "validation"
-
-        self.transform = transform
-        self.chip_size = chip_size
-        self.data_path = data_path
+        self.settings = settings[disaster]
+        self.chip_size = self.settings["dataloader"]["patch_size"]
+        self.data_path = Path(self.settings["data_path"]) / disaster
         self.disaster = disaster
         self.bands = bands
-        self.val_ratio = val_ratio
+        self.val_ratio = self.settings["dataloader"]["val_ratio"]
 
         self.filenames = self._read_split()  # read train/valid/test splits
 
     def _normalization(self, image):
-        if self.disaster == "fire":
-            img_norm_cfg = dict(
-                means=[
-                    0.033349706741586264,
-                    0.05701185520536176,
-                    0.05889748132001316,
-                    0.2323245113436119,
-                    0.1972854853760658,
-                    0.11944914225186566,
-                ],
-                stds=[
-                    0.02269135568823774,
-                    0.026807560223070237,
-                    0.04004109844362779,
-                    0.07791732423672691,
-                    0.08708738838140137,
-                    0.07241979477437814,
-                ],
-            )
-        elif self.disaster == "flood":
-            img_norm_cfg = dict(
-                means=[
-                    0.23651549,
-                    0.31761484,
-                    0.18514981,
-                    0.26901252,
-                    -14.57879175,
-                    -8.6098158,
-                    -14.29073382,
-                    -8.33534564,
-                ],
-                stds=[
-                    0.16280619,
-                    0.20849304,
-                    0.14008107,
-                    0.19767644,
-                    4.07141682,
-                    3.94773216,
-                    4.21006244,
-                    4.05494136,
-                ],
-            )
-        else:
-            img_norm_cfg = dict(
-                means=[0.485, 0.456, 0.406],
-                stds=[0.229, 0.224, 0.225],
-            )
-        means = np.array(img_norm_cfg["means"])
-        stds = np.array(img_norm_cfg["stds"])
+        # key = self.disaster if self.disaster in settings else "default"
+        # means = np.array(settings[key]["normalization"]["means"])
+        # stds = np.array(settings[key]["normalization"]["stds"])
+        means = np.array(self.settings["normalization"]["means"])
+        stds = np.array(self.settings["normalization"]["stds"])
         image = (image - means[:, None, None]) / stds[:, None, None]
         return image
 
     def _transform(self, x: Dict):
-        if self.transform == "resize":
-            image = x["image"]  # CHW
-            mask = x["mask"]  # HW
-            new_chips = np.zeros(
-                (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
+        image = x["image"]  # CHW
+        mask = x["mask"]  # HW
+        new_chips = np.zeros(
+            (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
+        )
+        for i in range(image.shape[0]):
+            # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
+            new_slice = cv2.resize(
+                image[i],
+                (self.chip_size, self.chip_size),
+                interpolation=cv2.INTER_NEAREST,
             )
-            for i in range(image.shape[0]):
-                # cv2.resize dsize receive the parameter(width, height), different from the img size of (H, W)
-                new_slice = cv2.resize(
-                    image[i],
-                    (self.chip_size, self.chip_size),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                new_chips[i, :, :] = new_slice
-            new_mask = cv2.resize(
-                mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
-            )
-            x["image"] = new_chips
-            x["mask"] = new_mask
+            new_chips[i, :, :] = new_slice
+        new_mask = cv2.resize(
+            mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
+        )
+        x["image"] = new_chips
+        x["mask"] = new_mask
         return x
 
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, idx):
+        if self.disaster not in settings:
+            raise ValueError(f"{self.disaster} is not a valid disaster")
         filename = self.filenames[idx]
-        if self.disaster == "fire":
-            image_path = os.path.join(
-                self.data_path, self.folder, f"{filename}_merged.tif"
-            )
-            mask_path = os.path.join(
-                self.data_path, self.folder, f"{filename}.mask.tif"
-            )
-        elif self.disaster == "flood":
-            image_path = os.path.join(
-                self.data_path, self.folder, f"{filename}_SAR.tif"
-            )
-            mask_path = os.path.join(self.data_path, self.folder, f"{filename}_GT.tif")
+        base_path = Path(self.data_path) / self.folder
+        image_path = base_path / (
+            filename + settings[self.disaster]["image_file_suffix"]
+        )
+        mask_path = base_path / (filename + settings[self.disaster]["mask_file_suffix"])
         with rasterio.open(image_path) as dataset:
             if self.bands is None:
                 image = dataset.read()  # CHW
@@ -159,7 +104,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         # convert missing data to nonfire
         mask[mask == -1] = 0
         sample = dict(image=image, mask=mask, id=filename)
-        if self.transform is not None:
+        if self.chip_size != 512:
             sample = self._transform(sample)
 
         return sample
@@ -175,13 +120,13 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         filenames = split_data.iloc[:, 0]
         split = round(1 / self.val_ratio)
 
-        perfex = -11 if self.disaster == "fire" else -8
+        prefix = settings[self.disaster]["prefix"]  # prefix of filename
         if self.split == "train":  # 90% for train
-            filenames = [x[:perfex] for i, x in enumerate(filenames) if i % split != 0]
+            filenames = [x[:prefix] for i, x in enumerate(filenames) if i % split != 0]
         elif self.split == "val":  # 10% for validation
-            filenames = [x[:perfex] for i, x in enumerate(filenames) if i % split == 0]
+            filenames = [x[:prefix] for i, x in enumerate(filenames) if i % split == 0]
         elif self.split == "test":
-            filenames = [x[:perfex] for i, x in enumerate(filenames)]
+            filenames = [x[:prefix] for i, x in enumerate(filenames)]
 
         return filenames
 
@@ -206,13 +151,38 @@ class MultispectralDataset(BaseMultispectralDataset):
         return sample
 
 
+class Sentinel1Flood(MultispectralDataset):
+    def __init__(
+        self,
+        split: str = "train",
+    ):
+        super().__init__(
+            disaster="flood",
+            split=split,
+        )
+
+    def bbb(self):
+        print("UrbanSarSentinel")
+
+
+class HlsFire(MultispectralDataset):
+    def __init__(
+        self,
+        split: str = "train",
+    ):
+        super().__init__(
+            disaster="fire",
+            split=split,
+        )
+
+    def bbb(self):
+        print("HLS")
+
+
 if __name__ == "__main__":
     dataset = MultispectralDataset(
-        data_path="/home/EarthExtreme-Bench/data/eo/flood",
         split="train",
         bands=None,
-        chip_size=512,
-        transform=None,
         disaster="flood",
     )
     x = dataset[1]

@@ -49,10 +49,10 @@ class DataPrefetcher:
         return self.length
 
 
-class ERA5Dataloader:
+class IMGDataloader:
     def __init__(
         self,
-        num_workers: int = 8,
+        num_workers: int = 2,
         pin_memory: bool = True,
         persistent_workers: bool = True,
         disaster: str = "heatwave",
@@ -100,7 +100,7 @@ class ERA5Dataloader:
             "coldwave": Era5ColdWave,
             "tropicalCyclone": TCDataset,
             "flood": Sentinel1Flood,
-            "fire": HlsFire
+            "fire": HlsFire,
         }
         if self.disaster not in disasters:
             raise ValueError(f"{self.disaster} is not a valid disaster")
@@ -116,8 +116,8 @@ class ERA5Dataloader:
                 shuffle=shuffle,
                 persistent_workers=self.persistent_workers,
                 drop_last=drop_last,
-            ),
-            dataset.records,
+            )
+            # dataset.records,
         )
 
 
@@ -125,8 +125,8 @@ if __name__ == "__main__":
     # dataset_path ='/home/code/data_storage_home/data/pangu'
     # means, std = LoadStatic(os.path.join(dataset_path, 'aux_data'))
     # print(means.shape) #(1, 21, 1, 1)
-    heatwave = ERA5Dataloader(disaster="tropicalCyclone")
-    loader, _ = heatwave.test_dataloader()
+    heatwave = IMGDataloader(disaster="heatwave")
+    loader = heatwave.train_dataloader()
     print(len(loader))
     # x = next(iter(test_loader))
     for id, train_data in enumerate(loader):
@@ -134,6 +134,7 @@ if __name__ == "__main__":
             print(key, val.shape if isinstance(val, torch.Tensor) else val)
         break
     """
+    tropicalCyclone: Test loader 2422
     x torch.Size([1, 3, 96, 96])
     x_upper torch.Size([1, 3, 5, 96, 96])
     y torch.Size([1, 3, 96, 96])
@@ -147,6 +148,41 @@ if __name__ == "__main__":
         ('disaster', ['tropicalCyclone']), 
         ('variable', [['msl'], ['u10'], ['v10'], ['z'], ['u'], ['v']]), 
         ('pressures', <BoxList: [tensor([1000]), tensor([850]), tensor([700]), tensor([500]), tensor([200])]>)])
+    
+    heatwave: Test loader 338
+    x torch.Size([1, 128, 128])
+    y torch.Size([1, 128, 128])
+    mask torch.Size([1, 3, 128, 128])
+    disno ['2023-0328-IND']
+    meta_info OrderedDict([('input_time', ['2023-04-01']),
+                           ('target_time', ['2023-04-15']), 
+                           ('disaster', ['heatwave']), 
+                           ('variable', ['t2m'])])
+                           
+    coldwave: Test loader 165
+    x torch.Size([1, 100, 100])
+    y torch.Size([1, 100, 100])
+    mask torch.Size([1, 3, 100, 100])
+    disno ['2023-0111-LBN']
+    meta_info OrderedDict([('input_time', ['2022-12-01']), 
+                           ('target_time', ['2022-12-15']), 
+                           ('disaster', ['coldwave']), 
+                           ('variable', ['t2m'])])
+
+    flood: Test loader 284
+    image torch.Size([1, 8, 512, 512])
+    mask torch.Size([1, 512, 512])
+    id ['20161011_Lumberton_ID_4_3']
+    x torch.Size([1, 8, 512, 512])
+    y torch.Size([1, 1, 512, 512])
+    
+    fire: Test loader: 263
+    image torch.Size([1, 6, 512, 512])
+    mask torch.Size([1, 512, 512])
+    id ['subsetted_512x512_HLS.S30.T14RNV.2018215.v1.4']
+    x torch.Size([1, 6, 512, 512])
+    y torch.Size([1, 1, 512, 512])
+
     """
     # import matplotlib.pyplot as plt
 

@@ -1,0 +1,170 @@
+[default]
+[default.normalization]
+means=[0.485, 0.456, 0.406]
+stds=[0.229, 0.224, 0.225]
+
+[fire]
+data_path = "/home/EarthExtreme-Bench/data/eo"
+image_file_suffix = "_merged.tif"
+mask_file_suffix = ".mask.tif"
+prefix = -11
+[fire.dataloader]
+patch_size = 128
+val_ratio = 0.2
+batch_size = 2
+[fire.normalization]
+means=[0.033349706741586264,
+       0.05701185520536176,
+       0.05889748132001316,
+       0.2323245113436119,
+       0.1972854853760658,
+       0.11944914225186566,
+]
+stds=[0.02269135568823774,
+      0.026807560223070237,
+      0.04004109844362779,
+      0.07791732423672691,
+      0.08708738838140137,
+      0.07241979477437814,
+]
+
+[flood]
+data_path = "/home/EarthExtreme-Bench/data/eo"
+image_file_suffix = "_SAR.tif"
+mask_file_suffix = "_GT.tif"
+prefix = -8
+[flood.dataloader]
+patch_size = 128
+val_ratio = 0.2
+batch_size = 2
+[flood.normalization]
+means=[0.23651549,
+       0.31761484,
+       0.18514981,
+       0.26901252,
+       -14.57879175,
+       -8.6098158,
+       -14.29073382,
+       -8.33534564,
+]
+stds=[0.16280619,
+      0.20849304,
+      0.14008107,
+      0.19767644,
+      4.07141682,
+      3.94773216,
+      4.21006244,
+      4.05494136,
+]
+
+[tropicalCyclone]
+data_path = "/home/EarthExtreme-Bench/data/weather"
+temporal_res = "hourly"
+[tropicalCyclone.dataloader]
+horizon = 14
+patch_size = 96
+val_ratio = 0.2
+batch_size = 1
+[tropicalCyclone.variables]
+surface = ['msl', 'u10', 'v10']
+upper = ['z', 'u', 'v']
+pressure_levels = [1000, 850, 700, 500, 200]
+[tropicalCyclone.normalization]
+surface_means = [101219.96875,
+                -1.6685997247695923,
+                0.40252354741096497
+]
+surface_stds = [618.3453369140625,
+                5.30508279800415,
+                4.64080810546875
+]
+masks_means = [0.3388888888888889,
+               0.6280021960240407,
+               3723.773681640625
+] #land, soil, topography
+masks_stds = [0.4733320292105142,
+              1.0399335522924775,
+              8349.2705078125
+]
+upper_means = [[ 1.0387257e+03, 1.4768715e+04, 3.0742109e+04, 5.7232758e+04, 1.2126830e+05],
+               [-1.8036983, -4.6696702e-01, 9.6720922e-01, 2.9308555e+00, 8.5616550],
+               [ 5.0504023e-01, 8.8930857e-01, 8.7114739e-01, 6.5244102e-01, -9.2036474e-01]
+]
+upper_stds = [[ 517.8634, 560.0722, 729.3351, 1083.372, 2051.2834],
+              [6.0425415, 7.8284435, 8.502205, 10.217555, 16.985355],
+              [5.2954426, 6.0997143, 6.1916695, 6.82727, 11.63218]
+]
+
+[coldwave]
+data_path = "/home/EarthExtreme-Bench/data/weather"
+temporal_res = "daily"
+[coldwave.variables]
+surface = 't2m'
+[coldwave.dataloader]
+horizon = 14
+patch_size = 100
+val_ratio = 0.2
+batch_size = 2
+[coldwave.normalization]
+mean = 274.322479248046
+std = 13.129130363464355
+mask_means = [0.3388888888888889,
+              0.6280021960240407,
+              3723.773681640625
+] # [land, soil, topograph]
+mask_stds = [0.4733320292105142,
+             1.0399335522924775,
+             8349.2705078125
+]
+
+[heatwave]
+data_path = "/home/EarthExtreme-Bench/data/weather"
+temporal_res = "daily"
+[heatwave.variables]
+surface = 't2m'
+[heatwave.dataloader]
+horizon = 14
+patch_size = 128
+val_ratio = 0.2
+batch_size = 2
+[heatwave.normalization]
+mean = 295.2374267578125
+std = 9.275670051574707
+mask_means = [0.3388888888888889,
+              0.6280021960240407,
+              3723.773681640625
+]
+mask_stds = [0.4733320292105142,
+             1.0399335522924775,
+             8349.2705078125
+]
+
+[storm]
+data_path = "/home/EarthExtreme-Bench/data/weather"
+temporal_res = "5minutes"
+[storm.normalization]
+max = 52.5
+[storm.dataloader]
+in_seq_length = 2
+out_seq_length = 5
+batch_size = 4
+stride = 1
+run_size = 25
+train_date = "2017-12-31" # 2010-01-01 to 2017-12-31
+val_date = "2018-12-31" # 2018-01-01 to 2018-12-31
+test_date = "2019-12-31" # 2019-01-01 to 2019-12-31
+
+[expcp]
+data_path = "/home/EarthExtreme-Bench/data/weather"
+temporal_res = "30minutes"
+[expcp.normalization]
+max = 104.56
+[expcp.dataloader]
+in_seq_length = 5
+out_seq_length = 20
+batch_size = 2
+stride = 1
+run_size = 25
+train_date = "2022-06-30" # 2020-01-01 to 2022-06-30
+val_date = "2022-12-31" # 2022-07-01 to 2022-12-31
+test_date = "2023-12-31" # 2023-01-01 to 2023-12-31

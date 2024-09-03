@@ -94,9 +94,11 @@ if __name__ == "__main__":
     #     print(i, v)
     """
     # IMERG Satellites
-    storm_path = CURR_FOLDER_PATH / "hdf_crops_n" / "pcp_metadata_2020to2023.csv"
+    storm_path = (
+        CURR_FOLDER_PATH / "hdf_crops_daily" / "pcp_daily_metadata_2020to2023.csv"
+    )
 
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "hdf_crops_n"
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "hdf_crops_daily"
     # Data path of the storm sequences
 
     metadata = pd.read_csv(storm_path, index_col="id")
@@ -113,21 +115,23 @@ if __name__ == "__main__":
         for idx in range(run_n):
             record = metadata.loc[idx]
 
-            date_string = record["start_datetime"]
+            date_start_string = record["start_datetime"]
+            date_end_string = record["end_datetime"]
             start_lat = int(record["start_lat"])
             start_lon = int(record["start_lon"])
-            date_object = datetime.strptime(date_string, "%m/%d/%Y")
-            date_str = date_object.strftime(
-                f"%Y%m%d_{start_lat:04}_{start_lon:04}.hdf5"
+            date_start = datetime.strptime(date_start_string, "%m/%d/%Y").strftime(
+                "%Y%m%d"
             )
+            date_end = datetime.strptime(date_end_string, "%m/%d/%Y").strftime("%Y%m%d")
+            filename = f"{date_start}_{date_end}_{start_lat:04}_{start_lon:04}.hdf5"
             assert os.path.exists(
-                os.path.join(OUTPUT_DATA_DIR, date_str)
-            ), f"The linked file {os.path.join(OUTPUT_DATA_DIR, date_str)} doesn't exsit!"
+                os.path.join(OUTPUT_DATA_DIR, filename)
+            ), f"The linked file {os.path.join(OUTPUT_DATA_DIR, filename)} doesn't exsit!"
 
             hdf_archive[str(idx)] = h5py.ExternalLink(
-                os.path.join(OUTPUT_DATA_DIR, date_str), "precipitation"
+                os.path.join(OUTPUT_DATA_DIR, filename), "precipitation"
             )
-            assert os.path.exists(os.path.join(OUTPUT_DATA_DIR, date_str))
+            assert os.path.exists(os.path.join(OUTPUT_DATA_DIR, filename))
 
             hdf_archive.flush()
 

@@ -8,6 +8,7 @@ from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
@@ -15,11 +16,15 @@ import numpy as np
 import pandas as pd
 import rasterio
 import torch
+
 # import earthextremebench as eb
 import xarray as xr
 from torch import Tensor
 from torch.utils import data
 from tqdm import tqdm
+
+sys.path.insert(0, "/home/EarthExtreme-Bench")
+from config.settings import settings
 
 
 def resize_and_crop(img, dst_w, dst_h):
@@ -54,7 +59,7 @@ class Record:
     def __init__(
         self, disaster: str, size: int, path: str, split: str, val_ratio: float
     ):
-        self.file_path = Path(path) / f"{disaster}-hourly"
+        self.file_path = Path(path) / f"{disaster}"
         self.df = pd.read_csv(
             self.file_path / f"{disaster}_surface_records_test.csv",
             encoding="unicode_escape",
@@ -89,71 +94,43 @@ class Record:
 
         self.min_w = np.min(self.df.W)
         # To do: read from records
-        self.surface_variables = ast.literal_eval(
-            self.df["variables"][0]
-        )  # ['msl', 'u10', 'v10']
-        self.upper_variables = ast.literal_eval(
-            self.df_upper["variables"][0]
-        )  # ['z', 'u', 'v']
-        self.pressure_levels = [1000, 850, 700, 500, 200]
+        self.surface_variables = settings[disaster]["variables"][
+            "surface"
+        ]  # ['msl', 'u10', 'v10']
+        self.upper_variables = settings[disaster]["variables"][
+            "upper"
+        ]  # ['z', 'u', 'v']
+        self.pressure_levels = settings[disaster]["variables"]["pressure_levels"]
         # surface mean and std
-        mean_std_dict_path = (
-            self.file_path / f"{disaster}-hourly_surface_records_stats.json"
-        )
-        if mean_std_dict_path.exists():
-            with open(mean_std_dict_path, "r") as fp:
-                mean_std_dict = json.load(fp)
         self.mean_std_dic = {}
         self.mean_std_dic["means"] = np.array(
-            [mean_std_dict[f"{disaster}_{var}_mean"] for var in self.surface_variables],
+            settings[disaster]["normalization"]["surface_means"],
             dtype=np.float32,
-        )
+        )  # shape (3,)
         self.mean_std_dic["stds"] = np.array(
-            [mean_std_dict[f"{disaster}_{var}_std"] for var in self.surface_variables],
+            settings[disaster]["normalization"]["surface_stds"],
             dtype=np.float32,
         )
         # upper mean and std
-        mean_std_dict_path_upper = (
-            self.file_path / f"{disaster}-hourly_upper_records_stats.json"
-        )
-        if mean_std_dict_path_upper.exists():
-            with open(mean_std_dict_path_upper, "r") as fp:
-                mean_std_dict_upper = json.load(fp)
         self.mean_std_dic_upper = {}
         # means: N, Z: (#variables x pressure levels) z, u, v at 1000, 850, ...
         self.mean_std_dic_upper["means"] = np.array(
-            [
-                mean_std_dict_upper[f"{disaster}_{var}_{p}_mean"]
-                for var in self.upper_variables
-                for p in self.pressure_levels
-            ],
+            settings[disaster]["normalization"]["upper_means"],
             dtype=np.float32,
-        ).reshape(len(self.upper_variables), len(self.pressure_levels))
+        )  # shape (3,5)
         self.mean_std_dic_upper["stds"] = np.array(
-            [
-                mean_std_dict_upper[f"{disaster}_{var}_{p}_std"]
-                for var in self.upper_variables
-                for p in self.pressure_levels
-            ],
+            settings[disaster]["normalization"]["upper_stds"],
             dtype=np.float32,
-        ).reshape(len(self.upper_variables), len(self.pressure_levels))
+        )
 
         # land, soil, topography mean and std
         self.mean_std_dic_mask = {}
         self.mean_std_dic_mask["means"] = np.array(
-            [
-                mean_std_dict["land_mask_mean"],
-                mean_std_dict["soil_type_mean"],
-                mean_std_dict["topography_mean"],
-            ],
+            settings[disaster]["normalization"]["masks_means"],
             dtype=np.float32,
         )
         self.mean_std_dic_mask["stds"] = np.array(
-            [
-                mean_std_dict["land_mask_std"],
-                mean_std_dict["soil_type_std"],
-                mean_std_dict["topography_std"],
-            ],
+            settings[disaster]["normalization"]["masks_stds"],
             dtype=np.float32,
         )
 
@@ -161,24 +138,24 @@ class Record:
 class TCDataset(data.Dataset, metaclass=ABCMeta):
     def __init__(
         self,
-        chip_size: int,
-        horizon: int,
-        disaster: str,
-        data_path: str,
         split: str,
-        val_ratio: float = 0.2,
         debug: bool = False,
     ):
-        self.horizon = horizon
+        self.disaster = "tropicalCyclone"
+        self.horizon = settings[self.disaster]["dataloader"]["horizon"]
+        self.chip_size = settings[self.disaster]["dataloader"]["patch_size"]
         self.transforms = None
-        self.disaster = disaster
-        self.records = Record(disaster, chip_size, data_path, split, val_ratio)
+        self.records = Record(
+            self.disaster,
+            self.chip_size,
+            settings[self.disaster]["data_path"],
+            split,
+            settings[self.disaster]["dataloader"]["val_ratio"],
+        )
         self.surface_variables = self.records.surface_variables
         self.upper_variables = self.records.upper_variables
         self.pressure_levels = self.records.pressure_levels
-        self.chip_size = chip_size
-
-        self.chip_metadic = self._init_meta_info(self.records, horizon)
+        self.chip_metadic = self._init_meta_info(self.records, self.horizon)
 
     def _init_meta_info(self, records, horizon):
         meta_info = {}
@@ -341,21 +318,23 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
             self.records.file_path, disno, self.records.max_w, self.records.max_w
         )
         # upper_data: (N, T, Z, H, W), surface # (N, T, H, W)
-        img = new_chips[:, frame, ...]
-        img_upper = new_upper_chips[:, frame, ...]
-        label = new_chips[:, frame + self.horizon, ...]
-        label_upper = new_upper_chips[:, frame + self.horizon, ...]
+        img = new_chips[:, frame, ...]  # (N, W, H)
+        img_upper = new_upper_chips[:, frame, ...]  # (N, Z, W, H)
+        label = new_chips[:, frame + self.horizon, ...]  # (N, W, H)
+        label_upper = new_upper_chips[:, frame + self.horizon, ...]  # (N, Z, W, H)
 
         # normalize the data
         stats = self.records.mean_std_dic
-        img_means = stats["means"][:, np.newaxis, np.newaxis, np.newaxis]
-        img_stds = stats["stds"][:, np.newaxis, np.newaxis, np.newaxis]
+        img_means = stats["means"][:, np.newaxis, np.newaxis]  # shape (3,1,1)
+        img_stds = stats["stds"][:, np.newaxis, np.newaxis]
         img_normalized = (img - img_means) / img_stds
         label_normalized = (label - img_means) / img_stds
 
         stats_upper = self.records.mean_std_dic_upper
-        img_upper_means = stats_upper["means"][:, np.newaxis, :, np.newaxis, np.newaxis]
-        img_upper_stds = stats_upper["stds"][:, np.newaxis, :, np.newaxis, np.newaxis]
+        img_upper_means = stats_upper["means"][
+            :, :, np.newaxis, np.newaxis
+        ]  # shape (3,5,1,1)
+        img_upper_stds = stats_upper["stds"][:, :, np.newaxis, np.newaxis]
         img_upper_normalized = (img_upper - img_upper_means) / img_upper_stds
         label_upper_normalized = (label_upper - img_upper_means) / img_upper_stds
 
@@ -365,11 +344,13 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
         mask_normalized = (mask - mask_means) / mask_stds
 
         sample = {
+            # x: shape (n, w, h)
             "x": torch.tensor(img_normalized),
+            # x: shape (n, z, w, h)
             "x_upper": torch.tensor(img_upper_normalized),
-            # y: shape (n, t, w, h)
+            # y: shape (n, w, h)
             "y": torch.tensor(label_normalized),
-            # y_upper: shape (n, t, z, w, h)
+            # y_upper: shape (n, z, w, h)
             "y_upper": torch.tensor(label_upper_normalized),
             # mask: shape (3, w, h)
             "mask": torch.tensor(mask_normalized),
@@ -385,10 +366,6 @@ class TCDataset(data.Dataset, metaclass=ABCMeta):
 
 if __name__ == "__main__":
     dataset = TCDataset(
-        horizon=2,
-        chip_size=128,
-        disaster="tropicalCyclone",
-        data_path="/home/EarthExtreme-Bench/data/weather",
         split="test",
     )
 
@@ -397,16 +374,15 @@ if __name__ == "__main__":
     x = dataset[-1]
     print(f"The dataset has {len(list(dataset.chip_metadic.keys()))} keys")
 
-    label = x["y"][0, 0].numpy()
+    label = x["y"][0].numpy()
     print(x["meta_info"]["raw_H"], x["meta_info"]["raw_W"])
     # label = cv2.resize(label, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
 
-    x_upper = x["x_upper"][0, 0, 0].numpy()
+    x_upper = x["x_upper"][0, 0].numpy()
     # x_upper = cv2.resize(x_upper, (x["meta_info"]['raw_W'], x["meta_info"]['raw_H']), interpolation=cv2.INTER_LINEAR)
 
     import matplotlib.pyplot as plt
 
-    plt.figure()
     plt.figure()
     plt.imshow(label)
     plt.colorbar()

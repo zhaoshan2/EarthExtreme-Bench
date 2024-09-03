@@ -1,4 +1,5 @@
 from datetime import timedelta
+import sys
 
 import h5py
 import numpy as np
@@ -12,20 +13,22 @@ class HDFIterator:
         data: h5py.File,
         metadata: pd.DataFrame,
         mask,
-        in_seq_length=1,
-        out_seq_length=1,
-        batch_size=4,
-        stride=1,
-        shuffle=True,
-        filter_threshold=0,
-        sort_by="id",
-        ascending=True,
-        return_mask=True,
-        run_size=25,
-        scan_max_value=52.5,
+        disaster: str = "storm",
+        in_seq_length: int = 1,
+        out_seq_length: int = 1,
+        batch_size: int = 4,
+        stride: int = 1,
+        shuffle: bool = True,
+        filter_threshold: float = 0,
+        sort_by: str = "id",
+        ascending: bool = True,
+        return_mask: bool = True,
+        run_size: int = 25,
+        scan_max_value: float = 52.5,
         return_type=np.float32,
     ):
         self.data = data
+        self.disaster = disaster
         self.metadata = (
             metadata.sample(frac=1)
             if shuffle
@@ -37,13 +40,12 @@ class HDFIterator:
         self.stride = stride
         self.filter_threshold = filter_threshold
         self.run_size = run_size
-        self.scan_max_value = scan_max_value
         self.in_seq_length = in_seq_length
         self.out_seq_length = out_seq_length
         self.return_type = return_type
-
         self.current_run = self._set_current_run()
         self.outlier_mask = None
+        self.scan_max_value = scan_max_value
         if return_mask:
             self.outlier_mask = mask
 

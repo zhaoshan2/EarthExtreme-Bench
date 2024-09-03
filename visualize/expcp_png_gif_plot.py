@@ -50,7 +50,7 @@ def main():
 if __name__ == "__main__":
     # sns.scatterplot(data=file, x="LON", y="LAT", hue="ISO_TIME",legend=False)
 
-    filename = "../filters/hdf_crops_daily/20200720_20200722_0900_1000.hdf5"
+    filename = "../filters/hdf_crops_daily/20210614_20210617_1050_2700.hdf5"
     seq = h5py.File(filename, "r", libver="latest")
     seq = seq["precipitation"]
     max_value = np.amax(seq)
@@ -60,10 +60,10 @@ if __name__ == "__main__":
     print("seq has the shape of", seq.shape)
     for i in range(seq.shape[0]):
         plt.figure()
-        plt.imshow(seq[i, :, :], vmin=0, vmax=47.65, cmap="magma")
+        plt.imshow(seq[i, :, :], vmin=0, vmax=60, cmap="magma")
         cbar = plt.colorbar()
-        cbar.set_label("mm/h", rotation=270, labelpad=15)
-        start_date_str = datetime.strptime("20200720", "%Y%m%d")
+        cbar.set_label("mm/h", rotation=90, labelpad=15)
+        start_date_str = datetime.strptime("20210614", "%Y%m%d")
         title_time = start_date_str + timedelta(minutes=30 * i)
         plt.title(f"precipitation_{title_time}")
         plt.savefig(f"figures/expcp_pngs/IMERG_img_{i}.png", dpi=200)

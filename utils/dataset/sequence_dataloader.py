@@ -8,17 +8,21 @@ import h5py
 import pandas as pd
 
 from utils.dataset.dataset_components.radar_storm_dataset import (
-    HDFIterator, infinite_batcher)
+    HDFIterator,
+    infinite_batcher,
+)
 
 
-class RADARDataloader:
+class SEQDataloader:
     def __init__(
         self,
         data_path: str,
         in_seq_length: int = 5,
         out_seq_length: int = 20,
         batch_size: int = 4,
-        val_ratio: float = 0.2,
+        train_date: str = "2022-06-30",
+        val_date: str = "2022-12-31",
+        test_date: str = "2023-12-31",
         num_workers: int = 8,
         pin_memory: bool = True,
         persistent_workers: bool = True,
@@ -35,7 +39,9 @@ class RADARDataloader:
         self.in_seq_length = in_seq_length
         self.out_seq_length = out_seq_length
         self.batch_size = batch_size
-        self.val_ratio = val_ratio
+        self.train_date = train_date
+        self.val_date = val_date
+        self.test_date = test_date
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
@@ -47,25 +53,28 @@ class RADARDataloader:
         self.scan_max_value = scan_max_value
 
         self.all_data = h5py.File(
-            os.path.join(data_path, "all_data_storm.hdf5"), "r", libver="latest"
+            os.path.join(data_path, f"all_data_{disaster}.hdf5"), "r", libver="latest"
         )
-        self.outlier_mask = cv2.imread(os.path.join(data_path, "taasrad_mask.png"), 0)
+        self.outlier_mask = None
+        if return_mask:
+            self.outlier_mask = cv2.imread(
+                os.path.join(data_path, "taasrad_mask.png"), 0
+            )
 
     def train_dataloader(self):
         metadata = pd.read_csv(
-            os.path.join(self.data_path, "storm_2010to2019.csv"), index_col="id"
+            os.path.join(self.data_path, f"{self.disaster}_metadata.csv"),
+            index_col="id",
         )
         metadata["start_datetime"] = pd.to_datetime(metadata["start_datetime"])
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
         metadata = metadata.loc[metadata["start_datetime"] >= "2010-01-01"]
-        metadata = metadata.loc[metadata["start_datetime"] < "2018-12-31"]
-        split_idx = int(len(metadata) * (1 - self.val_ratio))
-        train_meta = metadata.iloc[:split_idx]
+        metadata = metadata.loc[metadata["start_datetime"] < self.train_date]
 
         train_loader = infinite_batcher(
             data=self.all_data,
-            metadata=train_meta,
+            metadata=metadata,
             mask=self.outlier_mask,
             in_seq_length=self.in_seq_length,
             out_seq_length=self.out_seq_length,
@@ -80,18 +89,18 @@ class RADARDataloader:
 
     def val_dataloader(self):
         metadata = pd.read_csv(
-            os.path.join(self.data_path, "storm_2010to2019.csv"), index_col="id"
+            os.path.join(self.data_path, f"{self.disaster}_metadata.csv"),
+            index_col="id",
         )
         metadata["start_datetime"] = pd.to_datetime(metadata["start_datetime"])
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
-        metadata = metadata.loc[metadata["start_datetime"] >= "2010-01-01"]
-        metadata = metadata.loc[metadata["start_datetime"] < "2018-12-31"]
-        split_idx = int(len(metadata) * (1 - self.val_ratio))
-        val_meta = metadata.iloc[split_idx:]
+        metadata = metadata.loc[metadata["start_datetime"] >= self.train_date]
+        metadata = metadata.loc[metadata["start_datetime"] < self.val_date]
+
         val_loader = HDFIterator(
             data=self.all_data,
-            metadata=val_meta,
+            metadata=metadata,
             mask=self.outlier_mask,
             in_seq_length=self.in_seq_length,
             out_seq_length=self.out_seq_length,
@@ -106,13 +115,14 @@ class RADARDataloader:
 
     def test_dataloader(self):
         metadata = pd.read_csv(
-            os.path.join(self.data_path, "storm_2010to2019.csv"), index_col="id"
+            os.path.join(self.data_path, f"{self.disaster}_metadata.csv"),
+            index_col="id",
         )
         metadata["start_datetime"] = pd.to_datetime(metadata["start_datetime"])
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
-        metadata = metadata.loc[metadata["start_datetime"] >= "2019-01-01"]
-        metadata = metadata.loc[metadata["start_datetime"] < "2019-12-31"]
+        metadata = metadata.loc[metadata["start_datetime"] >= self.val_date]
+        metadata = metadata.loc[metadata["start_datetime"] < self.test_date]
 
         test_loader = HDFIterator(
             data=self.all_data,
@@ -136,17 +146,25 @@ if __name__ == "__main__":
     import numpy as np
     import torch
 
-    dataset_path = "/home/EarthExtreme-Bench/data/weather/storm-minutes"
+    dataset_path = "/home/EarthExtreme-Bench/data/weather/expcp-30minutes"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataloader = RADARDataloader(data_path=dataset_path, batch_size=1, val_ratio=0.0024)
+    dataloader = SEQDataloader(
+        data_path=dataset_path,
+        batch_size=1,
+        train_date="2022-06-30",
+        val_date="2022-12-31",
+        test_date="2023-12-31",
+        disaster="expcp",
+        return_mask=False,
+        scan_max_value=104.56,
+    )
     loader = dataloader.val_dataloader()
 
     sample = next(loader)
 
-    data, label, mask, datetime_clip = (
+    data, label, datetime_clip = (
         sample["x"],
         sample["y"],
-        sample["mask"],
         sample["datetime_seqs"],
     )
     print(datetime_clip)
@@ -154,10 +172,10 @@ if __name__ == "__main__":
     print(torch.amax(label))
     import matplotlib.pyplot as plt
 
-    # for i in range(data.shape[0]):
-    #     plt.figure()
-    #     plt.imshow(mask[i,0,0] * data[i,0,0], vmin=0, vmax=1, cmap="magma")
-    #     plt.colorbar()
-    #     title_time = datetime_clip[0] + timedelta(minutes=5*i)
-    #     plt.title(f'precipitation_{title_time}')
-    #     plt.savefig(f'radar_img_{i}.png', dpi=200)
+    for i in range(2):
+        plt.figure()
+        plt.imshow(label[i, 0, 0], vmin=0, vmax=1, cmap="magma")
+        plt.colorbar()
+        title_time = datetime_clip[0] + timedelta(minutes=30 * i)
+        plt.title(f"precipitation_{title_time}")
+        plt.savefig(f"img_{i}.png", dpi=200)

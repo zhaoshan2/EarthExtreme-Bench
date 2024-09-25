@@ -7,6 +7,7 @@ from pathlib import Path
 import cv2
 import h5py
 import pandas as pd
+from datetime import datetime
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 from config.settings import settings
@@ -49,8 +50,20 @@ class SEQDataloader:
                 os.path.join(self.data_path, "taasrad_mask.png"), 0
             )
         self.scan_max_value = settings[disaster]["normalization"]["max"]
+        assert self._check_date_valid(), "Data split contains invalid date string"
+
+    def _check_date_valid(self):
+        try:
+            for i in [0, 1]:
+                for set in ["train", "val", "test"]:
+                    datetime.strptime(self.settings[f"{set}_date"][i], "%Y-%m-%d")
+            return True
+        except ValueError:
+            # If an error occurs, the date is invalid
+            return False
 
     def train_dataloader(self):
+
         metadata = pd.read_csv(
             os.path.join(self.data_path, f"{self.disaster}_metadata.csv"),
             index_col="id",
@@ -58,9 +71,11 @@ class SEQDataloader:
         metadata["start_datetime"] = pd.to_datetime(metadata["start_datetime"])
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
-        metadata = metadata.loc[metadata["start_datetime"] >= "2010-01-01"]
         metadata = metadata.loc[
-            metadata["start_datetime"] < self.settings["train_date"]
+            metadata["start_datetime"] >= self.settings["train_date"][0]
+        ]
+        metadata = metadata.loc[
+            metadata["start_datetime"] < self.settings["train_date"][1]
         ]
 
         train_loader = infinite_batcher(
@@ -89,9 +104,11 @@ class SEQDataloader:
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
         metadata = metadata.loc[
-            metadata["start_datetime"] >= self.settings["train_date"]
+            metadata["start_datetime"] >= self.settings["val_date"][0]
         ]
-        metadata = metadata.loc[metadata["start_datetime"] < self.settings["val_date"]]
+        metadata = metadata.loc[
+            metadata["start_datetime"] < self.settings["val_date"][1]
+        ]
 
         val_loader = HDFIterator(
             data=self.all_data,
@@ -118,8 +135,12 @@ class SEQDataloader:
         metadata["start_datetime"] = pd.to_datetime(metadata["start_datetime"])
         metadata["end_datetime"] = pd.to_datetime(metadata["end_datetime"])
 
-        metadata = metadata.loc[metadata["start_datetime"] >= self.settings["val_date"]]
-        metadata = metadata.loc[metadata["start_datetime"] < self.settings["test_date"]]
+        metadata = metadata.loc[
+            metadata["start_datetime"] >= self.settings["test_date"][0]
+        ]
+        metadata = metadata.loc[
+            metadata["start_datetime"] < self.settings["test_date"][1]
+        ]
 
         test_loader = HDFIterator(
             data=self.all_data,
@@ -164,7 +185,7 @@ if __name__ == "__main__":
     Name: 774, dtype: object
     x torch.Size([5, 2, 1, 50, 50]) # input_sequence_length, batch_size, channels, width, height
     y torch.Size([20, 2, 1, 50, 50]) # output_sequence_length, batch_size, channels, width, height
-    datetime_seqs [Timestamp('2022-07-01 00:00:00'), Timestamp('2022-07-01 00:05:00')
+    meta_info [Timestamp('2022-07-01 00:00:00'), Timestamp('2022-07-01 00:05:00')
     
     storm:
     start_datetime    2018-01-08 00:00:00
@@ -175,8 +196,7 @@ if __name__ == "__main__":
     Name: 632, dtype: object
     x torch.Size([2, 4, 1, 480, 480])
     y torch.Size([5, 4, 1, 480, 480])
-    datetime_seqs [Timestamp('2018-01-08 00:00:00'), Timestamp('2018-01-08 00:05:00'), Timestamp('2018-01-08 00:10:00'), Timestamp('2018-01-08 00:15:00')]
-
+    meta_info [Timestamp('2018-01-08 00:00:00'), Timestamp('2018-01-08 00:05:00'), Timestamp('2018-01-08 00:10:00'), Timestamp('2018-01-08 00:15:00')]
     """
     # sample = next(loader)
     # data, label, datetime_clip = (

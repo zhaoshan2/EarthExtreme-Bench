@@ -12,7 +12,7 @@ from utils.logging_utils import get_logger
 
 
 import numpy as np
-from model_Baseline_vision import BaselineNet
+from model_Baseline_vision_random import BaselineNet
 from config.settings import settings
 
 
@@ -29,7 +29,7 @@ def set_seed(seed):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disaster", type=str, default="fire")
+    parser.add_argument("--disaster", type=str, default="heatwave")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     SAVE_PATH = (
         CURR_FOLDER_PATH
         / "results"
-        / "fully_finetune"
+        / "random"
         / config["model"]["name"].split("/")[-1]
         / disaster
     )

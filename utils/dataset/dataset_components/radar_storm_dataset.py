@@ -1,5 +1,4 @@
 from datetime import timedelta
-import sys
 
 import h5py
 import numpy as np
@@ -108,11 +107,11 @@ class HDFIterator:
                 "y": torch.from_numpy(
                     retval[-self.out_seq_length :, ...].astype(self.return_type)
                 ),
-                "datetime_seqs": datetime_seqs,
+                # datetime_seqs: the start times of the batch
+                "meta_info": datetime_seqs,
             }
 
         else:
-            # return retval, datetime_seqs, self._compute_mask(retval)
             masks = self._compute_mask(retval)
             # x: in_seq_length, B, 1, h, w -> 5, B, 1, 480, 480
             # datetime_seq: List of length 1, e.g., [Timestamp('2018-10-29 14:50:00')] the starting time
@@ -126,7 +125,7 @@ class HDFIterator:
                 "mask": torch.from_numpy(
                     masks[-self.out_seq_length :, ...].astype(self.return_type)
                 ),
-                "datetime_seqs": datetime_seqs,
+                "meta_info": datetime_seqs,
             }
         return sample
 

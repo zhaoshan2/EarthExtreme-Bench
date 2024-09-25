@@ -216,10 +216,10 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
         mask_stds = mask_stds.reshape(mask.shape[0], 1, 1)
         mask_normalized = (mask - mask_means) / mask_stds
         sample = {
-            # "x" (128,128)
-            "x": torch.tensor(img_normalized),
-            # "y" (128, 128)
-            "y": torch.tensor(label_normalized),
+            # "x" (1, 128,128)
+            "x": torch.tensor(img_normalized).unsqueeze(0),
+            # "y" (1, 128, 128)
+            "y": torch.tensor(label_normalized).unsqueeze(0),
             # mask (3, 128, 128)
             "mask": torch.tensor(mask_normalized),
             "disno": disno,

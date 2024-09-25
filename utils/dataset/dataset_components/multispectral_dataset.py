@@ -56,7 +56,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
 
     def _transform(self, x: Dict):
         image = x["image"]  # CHW
-        mask = x["mask"]  # HW
+        label = x["label"]  # HW
         new_chips = np.zeros(
             (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
         )
@@ -68,11 +68,11 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 interpolation=cv2.INTER_NEAREST,
             )
             new_chips[i, :, :] = new_slice
-        new_mask = cv2.resize(
-            mask, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
+        new_label = cv2.resize(
+            label, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
         )
         x["image"] = new_chips
-        x["mask"] = new_mask
+        x["label"] = new_label
         return x
 
     def __len__(self):
@@ -86,7 +86,9 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
         image_path = base_path / (
             filename + settings[self.disaster]["image_file_suffix"]
         )
-        mask_path = base_path / (filename + settings[self.disaster]["mask_file_suffix"])
+        label_path = base_path / (
+            filename + settings[self.disaster]["label_file_suffix"]
+        )
         with rasterio.open(image_path) as dataset:
             if self.bands is None:
                 image = dataset.read()  # CHW
@@ -99,11 +101,11 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 # Stack the bands into a single array with shape (height, width, 3)
                 image = np.stack((red, green, blue), axis=-1)
 
-        mask = np.array(Image.open(mask_path))  # (512,512)
+        label = np.array(Image.open(label_path))  # (512,512)
 
         # convert missing data to nonfire
-        mask[mask == -1] = 0
-        sample = dict(image=image, mask=mask, id=filename)
+        label[label == -1] = 0
+        sample = dict(image=image, label=label, meta_info=filename)
         if self.chip_size != 512:
             sample = self._transform(sample)
 
@@ -140,14 +142,14 @@ class MultispectralDataset(BaseMultispectralDataset):
         # resize images
         image = sample["image"]
 
-        mask = np.array(Image.fromarray(sample["mask"]))
+        label = np.array(Image.fromarray(sample["label"]))
 
         # CHW
         tensor_x = torch.tensor(image, dtype=torch.float32)
         sample["x"] = torch.nan_to_num(tensor_x, nan=0.0)
         # raise ValueError(f"Input tensor contains NaN values")
-        # mask shape 1HW
-        sample["y"] = torch.tensor(np.expand_dims(mask, 0), dtype=torch.float32)
+        # y shape 1HW
+        sample["y"] = torch.tensor(np.expand_dims(label, 0), dtype=torch.float32).long()
         return sample
 
 

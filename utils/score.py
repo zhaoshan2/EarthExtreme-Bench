@@ -281,3 +281,263 @@ def single2uint(x):
 def tensor2uint(x):
     x = x.data.squeeze().float().clamp_(0, 1).cpu().numpy()
     return np.uint8((x * 255.0).round())
+
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
+from numba import jit, float32, boolean, int32, float64, njit, int64
+
+
+@njit(
+    float32[:, :](float32[:, :, :, :, :], float32[:, :, :, :, :], int32[:, :, :, :, :])
+)
+def get_GDL_numba(prediction, truth, mask):
+    """Accelerated version of get_GDL using numba(http://numba.pydata.org/)
+
+    Parameters
+    ----------
+    prediction
+    truth
+    mask
+
+    Returns
+    -------
+    gdl
+    """
+    seqlen, batch_size, _, height, width = prediction.shape
+    gdl = np.zeros(shape=(seqlen, batch_size), dtype=np.float32)
+    for i in range(seqlen):
+        for j in range(batch_size):
+            for m in range(height):
+                for n in range(width):
+                    if m + 1 < height:
+                        if mask[i][j][0][m + 1][n] and mask[i][j][0][m][n]:
+                            pred_diff_h = abs(
+                                prediction[i][j][0][m + 1][n]
+                                - prediction[i][j][0][m][n]
+                            )
+                            gt_diff_h = abs(
+                                truth[i][j][0][m + 1][n] - truth[i][j][0][m][n]
+                            )
+                            gdl[i][j] += abs(pred_diff_h - gt_diff_h)
+                    if n + 1 < width:
+                        if mask[i][j][0][m][n + 1] and mask[i][j][0][m][n]:
+                            pred_diff_w = abs(
+                                prediction[i][j][0][m][n + 1]
+                                - prediction[i][j][0][m][n]
+                            )
+                            gt_diff_w = abs(
+                                truth[i][j][0][m][n + 1] - truth[i][j][0][m][n]
+                            )
+                            gdl[i][j] += abs(pred_diff_w - gt_diff_w)
+    return gdl
+
+
+def get_hit_miss_counts_numba(prediction, truth, mask, thresholds=None):
+    """This function calculates the overall hits and misses for the prediction, which could be used
+    to get the skill scores and threat scores:
+
+
+    This function assumes the input, i.e, prediction and truth are 3-dim tensors, (timestep, row, col)
+    and all inputs should be between 0~1
+
+    Parameters
+    ----------
+    prediction : np.ndarray
+        Shape: (seq_len, batch_size, 1, height, width)
+    truth : np.ndarray
+        Shape: (seq_len, batch_size, 1, height, width)
+    mask : np.ndarray or None
+        Shape: (seq_len, batch_size, 1, height, width)
+        0 --> not use
+        1 --> use
+    thresholds : list or tuple
+
+    Returns
+    -------
+    hits : np.ndarray
+        (seq_len, batch_size, len(thresholds))
+        TP
+    misses : np.ndarray
+        (seq_len, batch_size, len(thresholds))
+        FN
+    false_alarms : np.ndarray
+        (seq_len, batch_size, len(thresholds))
+        FP
+    correct_negatives : np.ndarray
+        (seq_len, batch_size, len(thresholds))
+        TN
+    """
+    if thresholds is None:
+        thresholds = [0.5, 1.0, 2.0, 5.0, 10.0]
+    assert 5 == prediction.ndim
+    assert 5 == truth.ndim
+    assert prediction.shape == truth.shape
+    assert prediction.shape[2] == 1
+    thresholds = [thresholds[i] for i in range(len(thresholds))]
+    thresholds = sorted(thresholds)
+    ret = _get_hit_miss_counts_numba(
+        prediction=prediction,
+        truth=truth,
+        mask=mask,
+        thresholds=np.array(thresholds).astype(np.float32),
+    )
+    return ret[:, :, :, 0], ret[:, :, :, 1], ret[:, :, :, 2], ret[:, :, :, 3]
+
+
+@njit(
+    int32[:, :, :, :](
+        float32[:, :, :, :, :], float32[:, :, :, :, :], int32[:, :, :, :, :], float32[:]
+    )
+)
+def _get_hit_miss_counts_numba(prediction, truth, mask, thresholds):
+    seqlen, batch_size, _, height, width = prediction.shape
+    threshold_num = len(thresholds)
+    ret = np.zeros(shape=(seqlen, batch_size, threshold_num, 4), dtype=np.int32)
+
+    for i in range(seqlen):
+        for j in range(batch_size):
+            for m in range(height):
+                for n in range(width):
+                    if mask[i][j][0][m][n]:
+                        for k in range(threshold_num):
+                            bpred = prediction[i][j][0][m][n] >= thresholds[k]
+                            btruth = truth[i][j][0][m][n] >= thresholds[k]
+                            ind = (1 - btruth) * 2 + (1 - bpred)
+                            ret[i][j][k][ind] += 1
+    return ret
+
+
+class RadarEvaluation(object):
+    def __init__(self, seq_len, no_ssim=True, thresholds=None):
+        self._thresholds = (
+            [0.5, 1.0, 2.0, 5.0, 10.0] if thresholds is None else thresholds
+        )
+        self._seq_len = seq_len
+        self._no_ssim = no_ssim
+        # self._exclude_mask = get_exclude_mask()
+        self.begin()
+
+    def begin(self):
+        self._total_hits = np.zeros(
+            (self._seq_len, len(self._thresholds)), dtype=np.int
+        )
+        self._total_misses = np.zeros(
+            (self._seq_len, len(self._thresholds)), dtype=np.int
+        )
+        self._total_false_alarms = np.zeros(
+            (self._seq_len, len(self._thresholds)), dtype=np.int
+        )
+        self._total_correct_negatives = np.zeros(
+            (self._seq_len, len(self._thresholds)), dtype=np.int
+        )
+        self._mse = np.zeros((self._seq_len,), dtype=np.float32)
+        self._mae = np.zeros((self._seq_len,), dtype=np.float32)
+        self._gdl = np.zeros((self._seq_len,), dtype=np.float32)
+        self._ssim = np.zeros((self._seq_len,), dtype=np.float32)
+        self._datetime_dict = {}
+        self._total_batch_num = 0
+
+    def clear_all(self):
+        self._total_hits[:] = 0
+        self._total_misses[:] = 0
+        self._total_false_alarms[:] = 0
+        self._total_correct_negatives[:] = 0
+        self._mse[:] = 0
+        self._mae[:] = 0
+        self._gdl[:] = 0
+        self._ssim[:] = 0
+        self._total_batch_num = 0
+
+    def update(self, gt, pred, mask=None, start_datetimes=None):
+        """
+
+        Parameters
+        ----------
+        gt : np.ndarray
+        pred : np.ndarray
+        mask : np.ndarray
+            0 indicates not use and 1 indicates that the location will be taken into account
+        start_datetimes : list
+            The starting datetimes of all the testing instances
+
+        Returns
+        -------
+
+        """
+        if start_datetimes is not None:
+            batch_size = len(start_datetimes)
+            assert gt.shape[1] == batch_size
+        else:
+            batch_size = gt.shape[1]
+        assert gt.shape[0] == self._seq_len
+        assert gt.shape == pred.shape
+        if mask is None:
+            mask = np.ones(gt.shape, dtype=np.int32)
+        assert gt.shape == mask.shape
+        self._total_batch_num += batch_size
+        # (l, b, c, h, w)
+        mse = (mask * np.square(pred - gt)).sum(axis=(2, 3, 4))
+        mae = (mask * np.abs(pred - gt)).sum(axis=(2, 3, 4))
+        gdl = get_GDL_numba(prediction=pred, truth=gt, mask=mask)
+        self._mse += mse.sum(axis=1)
+        self._mae += mae.sum(axis=1)
+        self._gdl += gdl.sum(axis=1)
+        if not self._no_ssim:
+            raise NotImplementedError
+            # self._ssim += get_SSIM(prediction=pred, truth=gt)
+        hits, misses, false_alarms, correct_negatives = get_hit_miss_counts_numba(
+            prediction=pred, truth=gt, mask=mask, thresholds=self._thresholds
+        )
+        self._total_hits += hits.sum(axis=1)
+        self._total_misses += misses.sum(axis=1)
+        self._total_false_alarms += false_alarms.sum(axis=1)
+        self._total_correct_negatives += correct_negatives.sum(axis=1)
+        return mse, mae
+
+    def calculate_stat(self):
+        """The following measurements will be used to measure the score of the forecaster
+
+        See Also
+        [Weather and Forecasting 2010] Equitability Revisited: Why the "Equitable Threat Score" Is Not Equitable
+        http://www.wxonline.info/topics/verif2.html
+
+        We will denote
+        (a b    (hits       false alarms
+         c d) =  misses   correct negatives)
+
+        We will report the
+        POD = a / (a + c)
+        FAR = b / (a + b)
+        CSI = a / (a + b + c)
+        Heidke Skill Score (HSS) = 2(ad - bc) / ((a+c) (c+d) + (a+b)(b+d))
+        Gilbert Skill Score (GSS) = HSS / (2 - HSS), also known as the Equitable Threat Score
+            HSS = 2 * GSS / (GSS + 1)
+        MSE = mask * (pred - gt) **2
+        MAE = mask * abs(pred - gt)
+        GDL = valid_mask_h * abs(gd_h(pred) - gd_h(gt)) + valid_mask_w * abs(gd_w(pred) - gd_w(gt))
+        Returns
+        -------
+
+        """
+        a = self._total_hits.astype(np.float64)
+        b = self._total_false_alarms.astype(np.float64)
+        c = self._total_misses.astype(np.float64)
+        d = self._total_correct_negatives.astype(np.float64)
+        pod = a / (a + c)
+        far = b / (a + b)
+        csi = a / (a + b + c)
+        n = a + b + c + d
+        aref = (a + b) / n * (a + c)
+        gss = (a - aref) / (a + b + c - aref)
+        hss = 2 * gss / (gss + 1)
+        mse = self._mse / self._total_batch_num
+        mae = self._mae / self._total_batch_num
+        gdl = self._gdl / self._total_batch_num
+        if not self._no_ssim:
+            raise NotImplementedError
+            # ssim = self._ssim / self._total_batch_num
+        return pod, far, csi, hss, gss, mse, mae, gdl

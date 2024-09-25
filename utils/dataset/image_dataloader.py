@@ -52,9 +52,9 @@ class DataPrefetcher:
 class IMGDataloader:
     def __init__(
         self,
-        num_workers: int = 2,
+        num_workers: int = 0,
         pin_memory: bool = True,
-        persistent_workers: bool = True,
+        persistent_workers: bool = False,
         disaster: str = "heatwave",
     ):
         super().__init__()
@@ -90,6 +90,7 @@ class IMGDataloader:
             Era5ColdWave,
             Era5HeatWave,
         )
+
         from utils.dataset.dataset_components.multispectral_dataset import (
             Sentinel1Flood,
             HlsFire,
@@ -122,11 +123,9 @@ class IMGDataloader:
 
 
 if __name__ == "__main__":
-    # dataset_path ='/home/code/data_storage_home/data/pangu'
-    # means, std = LoadStatic(os.path.join(dataset_path, 'aux_data'))
-    # print(means.shape) #(1, 21, 1, 1)
-    heatwave = IMGDataloader(disaster="heatwave")
-    loader = heatwave.train_dataloader()
+
+    exevent = IMGDataloader(disaster="tropicalCyclone")
+    loader = exevent.train_dataloader()
     print(len(loader))
     # x = next(iter(test_loader))
     for id, train_data in enumerate(loader):
@@ -150,8 +149,8 @@ if __name__ == "__main__":
         ('pressures', <BoxList: [tensor([1000]), tensor([850]), tensor([700]), tensor([500]), tensor([200])]>)])
     
     heatwave: Test loader 338
-    x torch.Size([1, 128, 128])
-    y torch.Size([1, 128, 128])
+    x torch.Size([1, 1, 128, 128])
+    y torch.Size([1, 1, 128, 128])
     mask torch.Size([1, 3, 128, 128])
     disno ['2023-0328-IND']
     meta_info OrderedDict([('input_time', ['2023-04-01']),
@@ -160,8 +159,8 @@ if __name__ == "__main__":
                            ('variable', ['t2m'])])
                            
     coldwave: Test loader 165
-    x torch.Size([1, 100, 100])
-    y torch.Size([1, 100, 100])
+    x torch.Size([1, 1, 100, 100])
+    y torch.Size([1, 1, 100, 100])
     mask torch.Size([1, 3, 100, 100])
     disno ['2023-0111-LBN']
     meta_info OrderedDict([('input_time', ['2022-12-01']), 
@@ -171,17 +170,17 @@ if __name__ == "__main__":
 
     flood: Test loader 284
     image torch.Size([1, 8, 512, 512])
-    mask torch.Size([1, 512, 512])
-    id ['20161011_Lumberton_ID_4_3']
+    label torch.Size([1, 512, 512])
+    meta_info ['20161011_Lumberton_ID_4_3']
     x torch.Size([1, 8, 512, 512])
     y torch.Size([1, 1, 512, 512])
     
     fire: Test loader: 263
     image torch.Size([1, 6, 512, 512])
-    mask torch.Size([1, 512, 512])
-    id ['subsetted_512x512_HLS.S30.T14RNV.2018215.v1.4']
+    label torch.Size([1, 512, 512]) 
+    meta_info ['subsetted_512x512_HLS.S30.T14RNV.2018215.v1.4']
     x torch.Size([1, 6, 512, 512])
-    y torch.Size([1, 1, 512, 512])
+    y torch.Size([1, 1, 512, 512]) #type: long
 
     """
     # import matplotlib.pyplot as plt

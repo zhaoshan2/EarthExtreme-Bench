@@ -96,9 +96,9 @@ class EETask:
         model_name = config["model"]["name"]
 
         if mode == "random":
-            from models.model_Baseline_vision_random import BaselineNet
+            from models.model_components.model_Baseline_vision_random import BaselineNet
         elif mode == "fully_supervised":
-            from models.model_Baseline_vision import BaselineNet
+            from models.model_components.model_Baseline_vision import BaselineNet
 
         model = BaselineNet(
             input_dim=input_dim,

@@ -10,6 +10,7 @@ import torch.nn as nn
 from utils import logging_utils, score
 import segmentation_models_pytorch as smp
 from torchmetrics import AUROC, AveragePrecision, F1Score
+import wandb
 
 
 class IMGTrain:
@@ -81,6 +82,13 @@ class IMGTrain:
 
             epoch_loss /= len(train_loader)
             end_time = time.time()
+            wandb.log(
+                {
+                    "train loss": epoch_loss,
+                    "learning_rate": optimizer.param_groups[0]["lr"],
+                }
+            )
+
             logger.info(
                 "Epoch {} : {:.3f} - Time cost: {:.3f}s".format(
                     i, epoch_loss, end_time - start_time
@@ -112,6 +120,7 @@ class IMGTrain:
                     loss_val /= len(val_loader)
                     lr_scheduler.step(loss_val)
                     logger.info("Val loss {} : {:.3f}".format(i, loss_val))
+                    wandb.log({"validation loss": loss_val})
                     if loss_val < best_loss:
                         best_loss = loss_val
                         best_epoch = i

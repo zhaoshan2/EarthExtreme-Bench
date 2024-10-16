@@ -10,8 +10,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from utils import logging_utils, score
-import segmentation_models_pytorch as smp
-from torchmetrics import AUROC, AveragePrecision, F1Score
 
 
 class SEQTrain:
@@ -49,7 +47,7 @@ class SEQTrain:
         iter_id = 0
         best_state, last_state = None, None
         best_epoch = 0
-        train_loader = data.train_dataloader()
+        train_loader, _ = data.train_dataloader()
         if isinstance(train_loader, DataLoader):
             logger.info(f"length of training loader {len(train_loader)}")
 
@@ -60,8 +58,8 @@ class SEQTrain:
             except StopIteration:
                 break
             else:
-
                 model.train()
+                # vision models
                 # x (l1, b, c, w, h) y (l2, b, c, w, h)
                 x_train = train_data["x"].to(device)  # (b, 1, w, h)
                 y_train = train_data["y"].to(device)
@@ -71,6 +69,7 @@ class SEQTrain:
                 logits = model(
                     x_train
                 )  # (upsampled) logits with the same w,h as inputs (b,c_out,w,h)
+
                 loss = criterion(logits, y_train)
                 # Call the backward algorithm and calculate the gratitude of parameters
                 # scaler.scale(loss).backward()
@@ -139,7 +138,8 @@ class StormTrain(SEQTrain):
     def __init__(self, disaster):
         super().__init__(disaster)
 
-    def test(self, model, test_loader, device, stats, save_path, model_id, seq_len):
+    def test(self, model, data, device, stats, save_path, model_id, seq_len):
+        test_loader, META_INFO = data.test_dataloader()
         maes, mses = dict(), dict()
         criterion = nn.L1Loss()
         total_loss = 0

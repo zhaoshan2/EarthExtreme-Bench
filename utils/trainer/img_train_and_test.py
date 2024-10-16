@@ -1,6 +1,7 @@
 import os
 import time
 from pathlib import Path
+from datetime import timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +12,7 @@ from utils import logging_utils, score
 import segmentation_models_pytorch as smp
 from torchmetrics import AUROC, AveragePrecision, F1Score
 import wandb
+from aurora import Batch, Metadata
 
 
 class IMGTrain:
@@ -38,12 +40,11 @@ class IMGTrain:
         """Training code"""
         # Prepare for the optimizer and scheduler
         # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
-        train_loader = data.train_dataloader()
-        val_loader = data.val_dataloader()
+        train_loader, _ = data.train_dataloader()
+        val_loader, _ = data.val_dataloader()
         # Loss function
         criterion = self.loss_mapping[loss]
 
-        loss_list = []
         best_loss = np.inf
 
         for i in range(num_epochs):
@@ -148,7 +149,8 @@ class ExtremeTemperatureTrain(IMGTrain):
     def __init__(self, disaster):
         super().__init__(disaster)
 
-    def test(self, model, test_loader, device, stats, save_path, model_id, **kwargs):
+    def test(self, model, data, device, stats, save_path, model_id, **kwargs):
+        test_loader, META_INFO = data.test_dataloader()
         rmse, acc = dict(), dict()
         criterion = nn.L1Loss()
         total_loss = 0
@@ -229,8 +231,9 @@ class FireTrain(IMGTrain):
     def __init__(self, disaster):
         super().__init__(disaster)
 
-    def test(self, model, test_loader, device, stats, save_path, model_id, **kwargs):
+    def test(self, model, data, device, stats, save_path, model_id, **kwargs):
         # turn off gradient tracking for evaluation
+        test_loader, META_INFO = data.test_dataloader()
         f1 = dict()
         test_f1 = F1Score()
         criterion = smp.losses.DiceLoss(mode="multiclass")

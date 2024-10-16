@@ -81,14 +81,17 @@ patience = 20
 data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = "hourly"
 [tropicalCyclone.dataloader]
-horizon = 14
+horizon = 6
 patch_size = 96
+model_patch = 4 # input is multiple times of model_patch when using aurora
+transforms = 0 # 0-only crop to multiple times of model_patch, 1- resize and crop to patch size
 val_ratio = 0.2
 batch_size = 1
 [tropicalCyclone.variables]
 surface = ['msl', 'u10', 'v10']
 upper = ['z', 'u', 'v']
-pressure_levels = [1000, 850, 700, 500, 200]
+mask = ['lsm', 'slt', 'z']
+pressure_levels = [1000, 850, 700, 500, 200] #[200, 500, 700, 850,1000]
 [tropicalCyclone.normalization]
 surface_means = [101219.96875,
                 -1.6685997247695923,
@@ -114,12 +117,26 @@ upper_stds = [[ 517.8634, 560.0722, 729.3351, 1083.372, 2051.2834],
               [6.0425415, 7.8284435, 8.502205, 10.217555, 16.985355],
               [5.2954426, 6.0997143, 6.1916695, 6.82727, 11.63218]
 ]
+[tropicalCyclone.model]
+input_dim = 4
+output_dim = 1
+name = "microsoft/aurora"
+patch_size = 4
+[tropicalCyclone.train]
+lr = 5e-6
+weight_decay = 5e-6
+num_iterations = 10000
+loss='l1'
+patience = 5
+surface_weights = [1.5, 0.77, 0.66] # msl, 10u, 10v
+upper_weights = [[2.8, 2.8, 2.8, 2.8, 2.8], [0.87, 0.87, 0.87, 0.87, 0.87], [0.6, 0.6, 0.6, 0.6, 0.6]] # z, u, v
 
 [coldwave]
 data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = "daily"
 [coldwave.variables]
 surface = 't2m'
+mask = ['lsm', 'slt', 'z']
 [coldwave.dataloader]
 horizon = 7
 patch_size = 128
@@ -152,6 +169,7 @@ data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = "daily"
 [heatwave.variables]
 surface = 't2m'
+mask = ['lsm', 'slt', 'z']
 [heatwave.dataloader]
 horizon = 14
 patch_size = 128
@@ -181,54 +199,65 @@ patience = 20
 
 [storm]
 data_path = "/home/EarthExtreme-Bench/data/weather"
-temporal_res = "5minutes"
+temporal_res = 5 #minutes
+spatial_res = 0.005
+[storm.variables]
+surface = ['pcp']
+upper = ['p']
+mask = ['n']
 [storm.normalization]
 max = 52.5
 [storm.dataloader]
-in_seq_length = 3
+in_seq_length = 2
 out_seq_length = 1
-batch_size = 4
+batch_size = 1
 stride = 5
 run_size = 25
 train_date = ["2010-01-01", "2017-12-31"] # 2010-01-01 to 2017-12-31
 val_date = ["2018-01-01", "2018-12-31"] # 2018-01-01 to 2018-12-31
 test_date = ["2019-01-01", "2019-04-09"] # 2019-01-01 to 2019-12-31
 [storm.evaluation]
-thresholds = [0.5, 1, 2, 5, 10]
+thresholds = [0.5, 2, 5, 10, 30]
 [storm.model]
-name = "openmmlab/upernet-convnext-tiny"
+name = "microsoft/aurora"
 input_dim = 3
 output_dim = 1
 [storm.train]
-lr = 5e-5
+lr = 2e-4
 weight_decay = 5e-3
 num_iterations = 500000
 loss='l1'
-patience = 10
+patience = 5
 
 [expcp]
 data_path = "/home/EarthExtreme-Bench/data/weather"
-temporal_res = "30minutes"
+temporal_res = 30 #minutes
+spatial_res = 0.1
+[expcp.variables]
+surface = ['pcp']
+upper = ['p']
+mask = ['n']
 [expcp.normalization]
 max = 104.56
 [expcp.dataloader]
-in_seq_length = 3
+in_seq_length = 2
 out_seq_length = 1
-batch_size = 2
+batch_size = 1
 stride = 1
-run_size = 25
-train_date = ["2020-01-01", "2020-06-30"] # 2020-01-01 to 2022-06-30
-val_date = ["2022-07-01", "2022-08-31"] # 2022-07-01 to 2022-12-31
-test_date = ["2020-01-01", "2020-02-28"] # 2023-01-01 to 2023-12-31
+model_patch = 4
+run_size = 6
+train_date = ["2020-01-01", "2022-06-30"] # 2020-01-01 to 2022-06-30
+val_date = ["2022-07-01", "2022-12-31"] # 2022-07-01 to 2022-12-31
+test_date = ["2023-01-01", "2023-12-31"] # 2023-01-01 to 2023-12-31
 [expcp.model]
-name = "openmmlab/upernet-convnext-tiny"
+name = "microsoft/aurora"
 input_dim = 3
 output_dim = 1
 [expcp.evaluation]
-thresholds = [0.5, 1, 2, 5, 10]
+thresholds = [0.5, 2, 5, 10, 30]
 [expcp.train]
-lr = 5e-5
-weight_decay = 5e-3
+lr = 1e-4
+weight_decay = 5e-6
 num_iterations = 500000
 loss = 'l1'
 patience = 10

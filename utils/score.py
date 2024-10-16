@@ -475,8 +475,10 @@ class RadarEvaluation(object):
             batch_size = gt.shape[1]
         assert gt.shape[0] == self._seq_len
         assert gt.shape == pred.shape
-        if mask is None:
-            mask = np.ones(gt.shape, dtype=np.int32)
+        # if mask is None:
+        mask = np.ones(gt.shape, dtype=np.int32)
+        # else:
+        #     mask = mask.astype(np.int32)
         assert gt.shape == mask.shape
         self._total_batch_num += batch_size
         # (l, b, c, h, w)

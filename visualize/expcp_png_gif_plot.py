@@ -24,50 +24,51 @@ def get_order(filename):
     """
     Return: the i index of the file
     """
-    return int(filename[10:-4])
+    return int(filename[-8:-4])
 
 
 def main():
     DISASTER = "pcp"
     CURR_FOLDER_PATH = Path(__file__).parent
 
-    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "figures/expcp_pngs"
+    OUTPUT_DATA_DIR = CURR_FOLDER_PATH / "figures/expcp_aurora"
 
     filenamelist = []
     for file in os.listdir(OUTPUT_DATA_DIR):
         filename = os.fsdecode(file)
-        if filename.endswith(".png"):
+        if filename.endswith(".png") and filename.startswith("pred_"):
             filenamelist.append(filename)
     filenamelist = sorted(filenamelist, key=get_order)
     # print(filenamelist)
     create_gif(
         OUTPUT_DATA_DIR,
         filenamelist,
-        os.path.join(OUTPUT_DATA_DIR, f"animation_{DISASTER}.gif"),
+        os.path.join(OUTPUT_DATA_DIR, f"animation_pred_{DISASTER}.gif"),
     )
 
 
 if __name__ == "__main__":
+
     # sns.scatterplot(data=file, x="LON", y="LAT", hue="ISO_TIME",legend=False)
 
-    filename = "../filters/hdf_crops_daily/20210614_20210617_1050_2700.hdf5"
-    seq = h5py.File(filename, "r", libver="latest")
-    seq = seq["precipitation"]
-    max_value = np.amax(seq)
-    print("The max value of the sequence is ", max_value)
-    # seq = np.clip(seq / max_value, 0, 1)
-
-    print("seq has the shape of", seq.shape)
-    for i in range(seq.shape[0]):
-        plt.figure()
-        plt.imshow(seq[i, :, :], vmin=0, vmax=60, cmap="magma")
-        cbar = plt.colorbar()
-        cbar.set_label("mm/h", rotation=90, labelpad=15)
-        start_date_str = datetime.strptime("20210614", "%Y%m%d")
-        title_time = start_date_str + timedelta(minutes=30 * i)
-        plt.title(f"precipitation_{title_time}")
-        plt.savefig(f"figures/expcp_pngs/IMERG_img_{i}.png", dpi=200)
-        plt.close()
+    # filename = "../filters/hdf_crops_daily/20210614_20210617_1050_2700.hdf5"
+    # seq = h5py.File(filename, "r", libver="latest")
+    # seq = seq["precipitation"]
+    # max_value = np.amax(seq)
+    # print("The max value of the sequence is ", max_value)
+    # # seq = np.clip(seq / max_value, 0, 1)
+    #
+    # print("seq has the shape of", seq.shape)
+    # for i in range(seq.shape[0]):
+    #     plt.figure()
+    #     plt.imshow(seq[i, :, :], vmin=0, vmax=60, cmap="magma")
+    #     cbar = plt.colorbar()
+    #     cbar.set_label("mm/h", rotation=90, labelpad=15)
+    #     start_date_str = datetime.strptime("20210614", "%Y%m%d")
+    #     title_time = start_date_str + timedelta(minutes=30 * i)
+    #     plt.title(f"precipitation_{title_time}")
+    #     plt.savefig(f"figures/expcp_pngs/IMERG_img_{i}.png", dpi=200)
+    #     plt.close()
     main()
 
     """

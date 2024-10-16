@@ -25,7 +25,7 @@ sys.path.insert(0, "/home/EarthExtreme-Bench")
 from config.settings import settings
 
 
-def resize_and_crop(img, dst_w, dst_h):
+def resize_and_crop(img, dst_w, dst_h, lon=None, lat=None):
     # Get the dimensions of the image
     height, width = img.shape[:2]
 
@@ -45,13 +45,27 @@ def resize_and_crop(img, dst_w, dst_h):
         img, (new_width, new_height), interpolation=cv2.INTER_LINEAR
     )
 
+    # Calculate scaling factors due to resizing
+    scaling_factor = width / new_width
+
     # Randomly crop a 224x224 region from the resized image
     x = random.randint(0, new_width - dst_h)
     y = random.randint(0, new_height - dst_w)
 
     cropped_img = resized_img[y : y + dst_h, x : x + dst_w, ...]
 
-    return cropped_img
+    if lon is not None:
+        # Calculate the corresponding longitude and latitude of the cropped patch
+        delta_lon = x * 0.25 * scaling_factor
+        delta_lat = y * 0.25 * scaling_factor
+
+        # The new upper-left corner coordinates in degrees
+        new_lon = lon + delta_lon
+        new_lat = lat - delta_lat  # latitude decreases as you move down
+        # cropped image, (new lon, new lat, new spatial resolution)
+        return cropped_img, (new_lon, new_lat, 0.25 * scaling_factor)
+    else:
+        return cropped_img
 
 
 class Record:
@@ -113,11 +127,12 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
             debug=debug,
         )
         self.chip_metadic = self._init_meta_info(self.records, self.horizon)
+        self.MetaInfo = {"disaster": self.disaster, "variable": self.variable}
 
     def _init_meta_info(self, records, horizon):
         meta_info = {}
         for disno in records.disno:
-            chips, data, _ = self.resize_sequence(
+            chips, data, _, new_space_info = self.resize_sequence(
                 records.file_path, disno, records.max_w, records.max_h
             )
             if chips.shape[0] - horizon <= 0:
@@ -132,10 +147,9 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
                             pd.to_datetime(data.time[i].values)
                             + timedelta(days=horizon)
                         ).strftime("%Y-%m-%d"),
-                        # "latitude": data.latitude.values.astype(np.float32),
-                        # "longitude": data.longitude.values.astype(np.float32),
-                        "disaster": self.disaster,
-                        "variable": self.variable,
+                        "latitude": new_space_info[1],
+                        "longitude": new_space_info[0],
+                        "resolution": new_space_info[2],
                     }
                 )
 
@@ -164,15 +178,19 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
 
         current_data = xr.open_dataset(file_path / disno / f"{disno}.nc")
         t2m = current_data[self.variable].values.astype(np.float32)
+        start_lon = current_data.longitude.values.astype(np.float32)[0]
+        start_lat = current_data.latitude.values.astype(np.float32)[0]
 
         new_chips = np.zeros(
             (t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32
         )
         for slice in range(t2m.shape[0]):
-            new_t2m_slice = resize_and_crop(t2m[slice], max_w, max_h)
+            new_t2m_slice, new_space_info = resize_and_crop(
+                t2m[slice], max_w, max_h, start_lon, start_lat
+            )
             new_chips[slice] = new_t2m_slice
 
-        return new_chips, current_data, mask
+        return new_chips, current_data, mask, new_space_info
 
     def __len__(self):
         # return len(list(self.chip_metadic.keys()))
@@ -199,7 +217,7 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
         disno = key[:-5]
         frame = int(key[-4:])
 
-        new_chips, _, mask = self.resize_sequence(
+        new_chips, _, mask, _ = self.resize_sequence(
             self.records.file_path, disno, self.records.max_w, self.records.max_h
         )
         img = new_chips[frame]

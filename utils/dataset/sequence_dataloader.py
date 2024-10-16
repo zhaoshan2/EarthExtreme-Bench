@@ -22,7 +22,7 @@ class SEQDataloader:
     def __init__(
         self,
         disaster="storm",
-        num_workers: int = 8,
+        num_workers: int = 4,
         pin_memory: bool = True,
         persistent_workers: bool = True,
         filter_threshold=0,
@@ -38,7 +38,7 @@ class SEQDataloader:
         self.settings = settings[disaster]["dataloader"]
         self.data_path = Path(settings[disaster]["data_path"]) / disaster
         self.filter_threshold = filter_threshold
-        self.return_mask = True if self.disaster == "flood" else False
+        self.return_mask = True  # if self.disaster == "flood" else False
         self.all_data = h5py.File(
             os.path.join(self.data_path, f"all_data_{disaster}.hdf5"),
             "r",
@@ -180,13 +180,13 @@ if __name__ == "__main__":
     end_datetime      2022-07-03 00:00:00
     run_length                        144
     avg_cell_value                1.95812
-    start_lat                        1100
-    start_lon                        2900
+    start_lat                        1100 --> lat_min, lat_max = 85 - lat * 0.1,  90 - lat * 0.1
+    start_lon                        2900 --> lon_min, lon_max = lon * 0.1 - 180, lon * 0.1 - 175
     Name: 774, dtype: object
     x torch.Size([5, 2, 1, 50, 50]) # input_sequence_length, batch_size, channels, width, height
     y torch.Size([20, 2, 1, 50, 50]) # output_sequence_length, batch_size, channels, width, height
     meta_info [Timestamp('2022-07-01 00:00:00'), Timestamp('2022-07-01 00:05:00')
-    
+
     storm:
     start_datetime    2018-01-08 00:00:00
     end_datetime      2018-01-08 23:55:00

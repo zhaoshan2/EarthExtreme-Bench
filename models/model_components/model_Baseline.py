@@ -10,10 +10,10 @@ from huggingface_hub import hf_hub_download
 
 from transformers import SegformerConfig, SegformerForSemanticSegmentation
 
-sys.path.insert(0, "/home/EarthExtreme-Bench")
-from torchsummary import summary
+from aurora.normalisation import locations, scales
 
 from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+from aurora import AuroraHighRes, AuroraSmall, Aurora, Batch, Metadata
 
 
 class BaselineNet(nn.Module):
@@ -23,6 +23,7 @@ class BaselineNet(nn.Module):
         # model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0", num_labels=output_dim)
 
         # backbone = timm.create_model(model_name, pretrained=True, features_only=True)
+        self.model_name = model_name
         if model_name == "openmmlab/upernet-convnext-tiny":
             original_model = UperNetForSemanticSegmentation.from_pretrained(model_name)
             original_conv1 = original_model.backbone.embeddings.patch_embeddings
@@ -133,6 +134,39 @@ class BaselineNet(nn.Module):
                                 / 3.0
                             )
                     module.weight.requires_grad_(True)
+        elif model_name == "microsoft/aurora_small":
+            model = AuroraSmall()
+            model.load_checkpoint(
+                "microsoft/aurora", "aurora-0.25-small-pretrained.ckpt"
+            )
+            for param in model.parameters():
+                param.requires_grad = True
+        elif model_name == "microsoft/aurora_highres":
+            model = AuroraHighRes()
+            model.load_checkpoint("wbruinsma/aurora", "aurora-0.1-finetuned.ckpt")
+            for param in model.parameters():
+                param.requires_grad = True
+        elif model_name == "microsoft/aurora":
+            model = Aurora(
+                use_lora=False,
+                surf_vars=("pcp",),
+                static_vars=("n",),
+                atmos_vars=("p",),
+            )
+            model.load_checkpoint_local(
+                "/home/data_storage_home/data/disaster/pretrained_model/aurora-0.25-pretrained.ckpt",
+                strict=False,
+            )
+            locations["pcp"] = 1.159494744
+            scales["pcp"] = 0.900219525
+            locations["p_0"] = 1.159494744
+            scales["p_0"] = 0.900219525
+            locations["n"] = 1.0
+            scales["n"] = 1.0
+
+            for param in model.parameters():
+                param.requires_grad = True
+            # microsoft-aurora 1.3.0 requires timm==0.6.13, but you have timm 0.9.2 (segmentation-models-pytorch 0.3.3 requires) which is incompatible.
 
         else:
             raise ValueError(f"Can't find matched model {model_name}.")
@@ -140,7 +174,8 @@ class BaselineNet(nn.Module):
         self.model = model
 
     def _initialize_weights(self, std=0.02):
-        for m in self.decoder:
+        # for m in self.decoder:
+        for m in self.model:
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
                 nn.init.trunc_normal_(m.weight, std=std, a=-2 * std, b=2 * std)
 
@@ -152,13 +187,11 @@ class BaselineNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        raw_size = x.size()
+        raw_size = x.size() if isinstance(x, torch.Tensor) else None
         x = self.model(x)
-        try:
-            x = x.logits
-        except AttributeError:
-            x = x
-        if x.size()[-2:] != raw_size[-2:]:
+        x = getattr(x, "logits", x)
+        # Interpolate if the output size doesn't match the input size
+        if isinstance(x, torch.Tensor) and x.size()[-2:] != raw_size[-2:]:
             x = nn.functional.interpolate(
                 x, size=raw_size[-2:], mode="bilinear", align_corners=False
             )
@@ -166,12 +199,37 @@ class BaselineNet(nn.Module):
 
 
 if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    input = torch.randn((1, 4, 128, 128)).to(device)
-    labels = torch.randn((1, 2, 128, 128)).to(device)
-    model = BaselineNet(input_dim=4, output_dim=2, model_name="unet")
-    # model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny")
-    model = model.to(device)
-    model.train()
-    output = model(input)
-    print("output shape", output.shape)
+    from datetime import datetime
+
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )  # ['msl', 'u10', 'v10']
+    batch = Batch(
+        surf_vars={k: torch.randn(1, 2, 17, 32) for k in ("2t", "10u", "10v", "msl")},
+        static_vars={k: torch.randn(17, 32) for k in ("lsm", "z", "slt")},
+        atmos_vars={k: torch.randn(1, 2, 4, 17, 32) for k in ("z", "u", "v", "t", "q")},
+        metadata=Metadata(
+            lat=torch.linspace(90, -90, 1800),
+            lon=torch.linspace(0, 360, 3601)[:-1],
+            time=(datetime(2020, 6, 1, 12, 0),),
+            atmos_levels=(100, 250, 500, 850),
+        ),
+    )
+    batch = batch.to(device)
+
+    model = BaselineNet(model_name="microsoft/aurora").to(device)
+    prediction = model.forward(batch)
+    output_test = prediction.surf_vars["msl"].detach().cpu().numpy()
+    x = batch.surf_vars["msl"].detach().cpu().numpy()
+
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 1, figsize=(5, 10))
+    im = axes[0].imshow(x[0, 0])
+    plt.colorbar(im, ax=axes[0])
+    axes[0].set_title("input")
+
+    im = axes[1].imshow(output_test[0, 0])
+    plt.colorbar(im, ax=axes[1])
+    axes[1].set_title("pred")
+    plt.savefig("rollout_1_aurora_random")

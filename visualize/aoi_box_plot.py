@@ -275,7 +275,7 @@ if __name__ == "__main__":
     print(lats)
     for lat, lon in zip(lats, lons):
 
-        lat_min, lat_max = (
+        lat_max, lat_min = (
             90 - (lat * 0.1 + 40),
             90 - (lat * 0.1 + 40 + 5),
         )

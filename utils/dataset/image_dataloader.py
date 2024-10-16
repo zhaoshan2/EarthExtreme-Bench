@@ -52,9 +52,9 @@ class DataPrefetcher:
 class IMGDataloader:
     def __init__(
         self,
-        num_workers: int = 0,
+        num_workers: int = 4,
         pin_memory: bool = True,
-        persistent_workers: bool = False,
+        persistent_workers: bool = True,
         disaster: str = "heatwave",
     ):
         super().__init__()
@@ -117,15 +117,15 @@ class IMGDataloader:
                 shuffle=shuffle,
                 persistent_workers=self.persistent_workers,
                 drop_last=drop_last,
-            )
-            # dataset.records,
+            ),
+            dataset.MetaInfo,
         )
 
 
 if __name__ == "__main__":
 
     exevent = IMGDataloader(disaster="tropicalCyclone")
-    loader = exevent.train_dataloader()
+    loader, META = exevent.train_dataloader()
     print(len(loader))
     # x = next(iter(test_loader))
     for id, train_data in enumerate(loader):
@@ -134,20 +134,23 @@ if __name__ == "__main__":
         break
     """
     tropicalCyclone: Test loader 2422
-    x torch.Size([1, 3, 96, 96])
-    x_upper torch.Size([1, 3, 5, 96, 96])
-    y torch.Size([1, 3, 96, 96])
-    y_upper torch.Size([1, 3, 5, 96, 96])
+    x torch.Size([1, 3, 2, 96, 96])
+    x_upper torch.Size([1, 3, 2, 5, 96, 96])
+    y torch.Size([1, 3, 1, 96, 96])
+    y_upper torch.Size([1, 3, 1, 5, 96, 96]) -> [B,N,T,Z,H,W]
     mask torch.Size([1, 3, 96, 96])
     disno ['TC_2019300N41309']
-    meta_info OrderedDict([('input_time', ['2019-10-27 00:00']), 
-        ('target_time', ['2019-10-27 14:00']), 
-        ('raw_H', tensor([21])), 
-        ('raw_W', tensor([97])), 
-        ('disaster', ['tropicalCyclone']), 
-        ('variable', [['msl'], ['u10'], ['v10'], ['z'], ['u'], ['v']]), 
-        ('pressures', <BoxList: [tensor([1000]), tensor([850]), tensor([700]), tensor([500]), tensor([200])]>)])
-    
+    meta_info OrderedDict([('input_time', '2019-12-28 10:00'), 
+                            ('target_time', '2019-12-29 00:00'), 
+                            ('latitude', 140.9022606382979), 
+                            ('longitude', 14.75), 
+                            ('resolution', 0.10704787234042554)], 
+    META  OrderedDict([('disaster', 'tropicalCyclone'), 
+                            ('sur_variables', ['msl', 'u10', 'v10']), 
+                            ('atm_variables', ['z', 'u', 'v']), 
+                            ('pressures', [1000, 850, 700, 500, 200])])
+
+
     heatwave: Test loader 338
     x torch.Size([1, 1, 128, 128])
     y torch.Size([1, 1, 128, 128])

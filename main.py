@@ -1,15 +1,15 @@
-import wandb
-from dotenv import load_dotenv
-from models.ee_models import EETask
 import argparse
 import os
+
 import torch
+
+from src.trainer import EETask
 
 # Press the green button in the gutter to run the script.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disaster", type=str, default="expcp")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--disaster", type=str, default="storm")
+    parser.add_argument("--seed", type=int, default=2546)
     parser.add_argument(
         "--mode",
         type=str,
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         choices=["fully_finetune", "random"],
     )
     parser.add_argument(
-        "--stage", type=str, default="train_test", choices=["train_test", "test"]
+        "--stage", type=str, default="test", choices=["train_test", "test"]
     )
     args = parser.parse_args()
 
@@ -33,9 +33,9 @@ if __name__ == "__main__":
         seed=args.seed,
         mode=args.mode,
         stage=args.stage,
-        model_path=f"/home/EarthExtreme-Bench/results/{args.mode}/aurora/{args.disaster}/best_model_5000_2024-10-16-04-50",
+        model_path=f"/home/EarthExtreme-Bench/results/{args.mode}/aurora/{args.disaster}/best_model_80000_2024-10-28-01-54",
     )
-
+    # mit-b0/best_model_78_2024-09-06-16-54
     # dataloader = ee_task.get_loader()
     # train_loader = dataloader.test_dataloader()
     # print(len(train_loader))

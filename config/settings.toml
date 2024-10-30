@@ -1,0 +1,4 @@
+[ckp_path]
+prithvi_100M ="/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt"
+dofa="/home/data_storage_home/data/disaster/pretrained_model/DOFA_ViT_base_e100.pth"
+aurora="/home/data_storage_home/data/disaster/pretrained_model/aurora-0.25-pretrained.ckpt"

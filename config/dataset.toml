@@ -9,9 +9,10 @@ image_file_suffix = "_merged.tif"
 label_file_suffix = ".mask.tif"
 prefix = -11
 [fire.dataloader]
-patch_size = 512
-val_ratio = 0.2
-batch_size = 2
+in_seq_length = 1
+img_size = 512
+val_ratio = 1e-5
+batch_size = 1
 [fire.normalization]
 means=[0.033349706741586264,
        0.05701185520536176,
@@ -30,11 +31,11 @@ stds=[0.02269135568823774,
 [fire.model]
 input_dim = 6
 output_dim = 2
-name = "unet"
+name = "nvidia/mit-b0"#'ibm-nasa-geospatial/prithvi'#'openmmlab/upernet-convnext-tiny'
 [fire.train]
-lr = 1e-3
+lr = 1.3e-05
 weight_decay = 5e-6
-num_epochs = 100
+num_epochs = 50
 loss = 'dice'
 patience = 20
 
@@ -44,7 +45,8 @@ image_file_suffix = "_SAR.tif"
 label_file_suffix = "_GT.tif"
 prefix = -8
 [flood.dataloader]
-patch_size = 512
+in_seq_length = 1
+img_size = 512
 val_ratio = 0.2
 batch_size = 1
 [flood.normalization]
@@ -82,9 +84,10 @@ data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = "hourly"
 [tropicalCyclone.dataloader]
 horizon = 6
-patch_size = 96
+in_seq_length = 1
+img_size = 96
 model_patch = 4 # input is multiple times of model_patch when using aurora
-transforms = 0 # 0-only crop to multiple times of model_patch, 1- resize and crop to patch size
+transforms = 0 # 0-only crop to multiple times of model_patch, 1- resize and crop to img size
 val_ratio = 0.2
 batch_size = 1
 [tropicalCyclone.variables]
@@ -139,7 +142,8 @@ surface = 't2m'
 mask = ['lsm', 'slt', 'z']
 [coldwave.dataloader]
 horizon = 7
-patch_size = 128
+in_seq_length = 1
+img_size = 128
 val_ratio = 0.5
 batch_size = 2
 [coldwave.normalization]
@@ -172,7 +176,8 @@ surface = 't2m'
 mask = ['lsm', 'slt', 'z']
 [heatwave.dataloader]
 horizon = 14
-patch_size = 128
+in_seq_length = 1
+img_size = 128
 val_ratio = 0.4
 batch_size = 16
 [heatwave.normalization]
@@ -206,28 +211,33 @@ surface = ['pcp']
 upper = ['p']
 mask = ['n']
 [storm.normalization]
+pcp_mean = 1.824645369
+pcp_std = 1.122875855
 max = 52.5
+noise_mean = 0.7784
+noise_std = 0.4154
 [storm.dataloader]
+img_size = 480
 in_seq_length = 2
 out_seq_length = 1
 batch_size = 1
 stride = 5
 run_size = 25
-train_date = ["2010-01-01", "2017-12-31"] # 2010-01-01 to 2017-12-31
-val_date = ["2018-01-01", "2018-12-31"] # 2018-01-01 to 2018-12-31
-test_date = ["2019-01-01", "2019-04-09"] # 2019-01-01 to 2019-12-31
+train_date = ["2017-01-01", "2018-06-30"] # 2010-01-01 to 2017-12-31
+val_date = ["2018-06-30", "2018-12-31"] # 2018-01-01 to 2018-12-31
+test_date = ["2019-01-01", "2019-12-31"] # 2019-01-01 to 2019-12-31
 [storm.evaluation]
 thresholds = [0.5, 2, 5, 10, 30]
 [storm.model]
-name = "microsoft/aurora"
+name = "microsoft/aurora_pcp"
 input_dim = 3
 output_dim = 1
 [storm.train]
-lr = 2e-4
-weight_decay = 5e-3
-num_iterations = 500000
+lr = 5e-5
+weight_decay = 5e-6
+num_iterations = 100000
 loss='l1'
-patience = 5
+patience = 10
 
 [expcp]
 data_path = "/home/EarthExtreme-Bench/data/weather"
@@ -239,24 +249,27 @@ upper = ['p']
 mask = ['n']
 [expcp.normalization]
 max = 104.56
+pcp_mean = 1.159494744
+pcp_std = 0.900219525
 [expcp.dataloader]
+img_size = 50
 in_seq_length = 2
 out_seq_length = 1
 batch_size = 1
 stride = 1
 model_patch = 4
 run_size = 6
-train_date = ["2020-01-01", "2022-06-30"] # 2020-01-01 to 2022-06-30
-val_date = ["2022-07-01", "2022-12-31"] # 2022-07-01 to 2022-12-31
+train_date = ["2020-01-01", "2020-01-17"] # 2020-01-01 to 2022-06-30
+val_date = ["2022-01-01", "2022-01-15"] # 2022-07-01 to 2022-12-31
 test_date = ["2023-01-01", "2023-12-31"] # 2023-01-01 to 2023-12-31
 [expcp.model]
-name = "microsoft/aurora"
+name = "microsoft/aurora_pcp"
 input_dim = 3
 output_dim = 1
 [expcp.evaluation]
 thresholds = [0.5, 2, 5, 10, 30]
 [expcp.train]
-lr = 1e-4
+lr = 5e-6
 weight_decay = 5e-6
 num_iterations = 500000
 loss = 'l1'

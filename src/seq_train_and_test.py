@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,14 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from .utils import logging_utils, score_utils
+
+sys.path.insert(0, "/home/EarthExtreme-Bench")
+import wandb
+from config.settings import settings
+
+
+def _normback(img, mu, sigma):
+    return img * sigma + mu
 
 
 class SEQTrain:
@@ -41,7 +50,6 @@ class SEQTrain:
         # Loss function
         criterion = self.loss_mapping[loss]
         start_time = time.time()
-        loss_list = []
         best_loss = np.inf
         total_loss = 0.0
         iter_id = 0
@@ -82,6 +90,12 @@ class SEQTrain:
                 optimizer.step()
                 total_loss += loss.item()
                 iter_id += 1
+                wandb.log(
+                    {
+                        "train loss": loss.item(),
+                        "learning_rate": optimizer.param_groups[0]["lr"],
+                    }
+                )
                 # Validate
                 if iter_id % 1000 == 0:
                     logger.info("Iter {} : {:.3f}".format(iter_id, total_loss / 1000))
@@ -105,6 +119,7 @@ class SEQTrain:
                     loss_val /= len(val_loader)
                     lr_scheduler.step(loss_val)
                     logger.info("Val loss {} : {:.3f}".format(iter_id, loss_val))
+                    wandb.log({"val loss": loss_val})
                     if loss_val < best_loss:
                         best_loss = loss_val
                         best_epoch = iter_id
@@ -143,8 +158,15 @@ class StormTrain(SEQTrain):
         maes, mses = dict(), dict()
         criterion = nn.L1Loss()
         total_loss = 0
+        thresholds = settings[self.disaster]["evaluation"]["thresholds"]
+        thresholds = score_utils.rainfall_to_pixel(
+            np.array(thresholds, dtype=np.float32)
+        )  # [0.328, 0.395, 0.462, 0.551, 0.618, 0.725]
         # turn off gradient tracking for evaluation
-        evaluator = score_utils.RadarEvaluation(seq_len=seq_len)
+        evaluator = score_utils.RadarEvaluation(seq_len=seq_len, thresholds=thresholds)
+        scan_max = settings[self.disaster]["normalization"]["max"]
+        scan_mean = settings[self.disaster]["normalization"]["pcp_mean"]
+        scan_sigma = settings[self.disaster]["normalization"]["pcp_std"]
         with torch.no_grad():
             # iterate through test data
             for id, test_data in enumerate(test_loader):
@@ -158,8 +180,14 @@ class StormTrain(SEQTrain):
                 loss = criterion(logits_test, y_test.squeeze(2).transpose(0, 1))
 
                 prediction = logits_test.transpose(0, 1).unsqueeze(2)
-                test_y_numpy = y_test.detach().cpu().numpy()
-                prediction_numpy = prediction.detach().cpu().numpy()
+                test_y_numpy = (
+                    _normback(y_test.detach().cpu().numpy(), scan_mean, scan_sigma)
+                    / scan_max
+                )
+                prediction_numpy = (
+                    _normback(prediction.detach().cpu().numpy(), scan_mean, scan_sigma)
+                    / scan_max
+                )  # for evaluation, norm back to the original domain and then clip to [0,1]
                 if mask is not None:
                     mse, mae = evaluator.update(
                         test_y_numpy, prediction_numpy, mask.cpu().numpy()
@@ -172,19 +200,30 @@ class StormTrain(SEQTrain):
                     maes[datetime_seqs[k].strftime("%y-%m-%d %H:%M:%S")] = mae[:, k]
                     mses[datetime_seqs[k].strftime("%y-%m-%d %H:%M:%S")] = mse[:, k]
                 # visualize the first batch and the first horizon
-                x = x_test.transpose(0, 1).unsqueeze(2).detach().cpu().numpy()
+                x = _normback(
+                    x_test.transpose(0, 1).unsqueeze(2).detach().cpu().numpy(),
+                    scan_mean,
+                    scan_sigma,
+                )
+                mask = mask[0, 0, 0].numpy()
                 fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                im = axes[0].imshow(x[0, 0, 0])
+                im = axes[0].imshow(x[0, 0, 0] * mask)
                 plt.colorbar(im, ax=axes[0])
-                input_time = datetime_seqs[0].strftime("%y-%m-%d %H:%M")
+                input_time = datetime_seqs[0] + timedelta(
+                    minutes=settings[self.disaster]["temporal_res"]
+                )
+                input_time = input_time.strftime("%y-%m-%dT%H%M")
                 axes[0].set_title(f"input_{input_time}")
 
-                im = axes[1].imshow(test_y_numpy[0, 0, 0])
+                im = axes[1].imshow(test_y_numpy[0, 0, 0] * scan_max * mask)
                 plt.colorbar(im, ax=axes[1])
-                target_time = datetime_seqs[0] + timedelta(minutes=5)
+                target_time = datetime_seqs[0] + timedelta(
+                    minutes=settings[self.disaster]["temporal_res"]
+                    * settings[self.disaster]["dataloader"]["run_size"]
+                )
                 axes[1].set_title(f"target_{target_time}")
 
-                im = axes[2].imshow(prediction_numpy[0, 0, 0])
+                im = axes[2].imshow(prediction_numpy[0, 0, 0] * scan_max * mask)
                 plt.colorbar(im, ax=axes[2])
                 axes[2].set_title(f"pred_{target_time}")
 
@@ -197,18 +236,114 @@ class StormTrain(SEQTrain):
             csv_path = save_path / model_id / "csv"
             if not os.path.exists(csv_path):
                 os.makedirs(csv_path)
-            _, _, test_csi, test_hss, _, test_mse, test_mae, _ = (
+            test_pod, test_far, test_csi, test_hss, _, test_mse, test_mae, _ = (
                 evaluator.calculate_stat()
             )
-            total_loss = total_loss / id
             logging_utils.save_errorScores(csv_path, maes, "maes")
             logging_utils.save_errorScores(csv_path, mses, "mses")
-        return {"CSI": test_csi, "HSS": test_hss, "MSE": test_mse, "MAE": test_mae}
+        return {
+            "POD": test_pod,
+            "FAR": test_far,
+            "CSI": test_csi,
+            "HSS": test_hss,
+            "MSE": test_mse,
+            "MAE": test_mae,
+        }
 
 
-class ExpcpTrain(StormTrain):
+class ExpcpTrain(SEQTrain):
     def __init__(self, disaster):
         super().__init__(disaster)
+
+    def test(self, model, data, device, stats, save_path, model_id, seq_len):
+        test_loader, META_INFO = data.test_dataloader()
+        maes, mses = dict(), dict()
+        criterion = nn.L1Loss()
+        total_loss = 0
+        scan_max = settings[self.disaster]["normalization"]["max"]
+        scan_mean = settings[self.disaster]["normalization"]["pcp_mean"]
+        scan_sigma = settings[self.disaster]["normalization"]["pcp_std"]
+        thresholds = settings[self.disaster]["evaluation"]["thresholds"]
+        thresholds = [
+            thresholds[i] / scan_max for i in range(len(thresholds))
+        ]  # convert thresholds to [0,1]
+        # turn off gradient tracking for evaluation
+        evaluator = score_utils.RadarEvaluation(seq_len=seq_len, thresholds=thresholds)
+
+        with torch.no_grad():
+            # iterate through test data
+            for id, test_data in enumerate(test_loader):
+                x_test = test_data["x"].to(device)
+                x_test = torch.transpose(x_test, 0, 1).squeeze(2)
+                y_test = test_data["y"].to(device)
+                model.eval()
+
+                logits_test = model(x_test)
+                loss = criterion(logits_test, y_test.squeeze(2).transpose(0, 1))
+
+                prediction = logits_test.transpose(0, 1).unsqueeze(2)
+
+                test_y_numpy = (
+                    _normback(y_test.detach().cpu().numpy(), scan_mean, scan_sigma)
+                    / scan_max
+                )
+                prediction_numpy = (
+                    _normback(prediction.detach().cpu().numpy(), scan_mean, scan_sigma)
+                    / scan_max
+                )
+                mse, mae = evaluator.update(test_y_numpy, prediction_numpy)
+
+                datetime_seqs = test_data["meta_info"]
+                for k in range(mae.shape[1]):
+                    maes[datetime_seqs[k].strftime("%y-%m-%d %H:%M:%S")] = mae[:, k]
+                    mses[datetime_seqs[k].strftime("%y-%m-%d %H:%M:%S")] = mse[:, k]
+                # visualize the first batch and the first horizon
+                x = _normback(
+                    x_test.transpose(0, 1).unsqueeze(2).detach().cpu().numpy()
+                )
+                fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                im = axes[0].imshow(x[0, 0, 0])
+                plt.colorbar(im, ax=axes[0])
+                input_time = datetime_seqs[0] + timedelta(
+                    minutes=settings[self.disaster]["temporal_res"]
+                )
+                input_time = input_time.strftime("%y-%m-%dT%H%M")
+                axes[0].set_title(f"input_{input_time}")
+
+                im = axes[1].imshow(test_y_numpy[0, 0, 0] * scan_max)
+                plt.colorbar(im, ax=axes[1])
+                target_time = datetime_seqs[0] + timedelta(
+                    minutes=settings[self.disaster]["temporal_res"]
+                    * settings[self.disaster]["dataloader"]["run_size"]
+                )
+                axes[1].set_title(f"target_{target_time}")
+
+                im = axes[2].imshow(prediction_numpy[0, 0, 0] * scan_max)
+                plt.colorbar(im, ax=axes[2])
+                axes[2].set_title(f"pred_{target_time}")
+
+                png_path = save_path / model_id / "png"
+                if not os.path.exists(png_path):
+                    os.makedirs(png_path)
+                plt.savefig(f"{png_path}/test_pred_{input_time}.png")
+                plt.close(fig)
+                total_loss += loss
+            csv_path = save_path / model_id / "csv"
+            if not os.path.exists(csv_path):
+                os.makedirs(csv_path)
+            test_pod, test_far, test_csi, test_hss, _, test_mse, test_mae, _ = (
+                evaluator.calculate_stat()
+            )
+            logging_utils.save_errorScores(csv_path, maes, "maes")
+            logging_utils.save_errorScores(csv_path, mses, "mses")
+        return {
+            "POD": test_pod,
+            "FAR": test_far,
+            "CSI": test_csi,
+            "HSS": test_hss,
+            "MSE": test_mse,
+            "MAE": test_mae,
+        }
 
 
 if __name__ == "__main__":

@@ -3,9 +3,9 @@
 ## Extreme events
 
 ## Dataset
-The dataset is available in [HuggingFace][\url{https://huggingface.co/datasets/zhaoshan/ee-bench_v1.0/tree/stable/data}]
+The dataset is available in [HuggingFace](https://huggingface.co/datasets/zhaoshan/ee-bench_v1.0/tree/stable/data)
 
-To download the dataset, use``earthextremebench/earthextremebench_download.py``
+To download the dataset, use ``earthextremebench/earthextremebench_download.py``
 ## Instruction
 To get the task on one extreme event ```ee_task = EETask(disaster="coldwave")```
 

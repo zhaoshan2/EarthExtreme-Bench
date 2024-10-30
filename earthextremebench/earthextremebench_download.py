@@ -42,7 +42,9 @@ def download_benchmark():
     local_directory.mkdir(parents=True, exist_ok=True)
 
     api = HfApi()
-    dataset_files = api.list_repo_files(repo_id=dataset_repo, repo_type="dataset")
+    dataset_files = api.list_repo_files(
+        repo_id=dataset_repo, repo_type="dataset", revision="stable"
+    )
 
     for file in dataset_files:
         local_file_path = local_directory / file

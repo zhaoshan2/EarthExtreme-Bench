@@ -14,7 +14,9 @@ from transformers import (
 
 # transformers editable installation: https://huggingface.co/docs/transformers/installation#installing-from-source
 class BaselineNet(nn.Module):
-    def __init__(self, model_name, input_dim=4, output_dim=1, *args, **kwargs):
+    def __init__(
+        self, model_name, input_dim=4, output_dim=1, freezing_body=True, *args, **kwargs
+    ):
         super(BaselineNet, self).__init__()
         # define model
         # model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0", num_labels=output_dim)
@@ -35,6 +37,7 @@ class BaselineNet(nn.Module):
             model = UperNetForSemanticSegmentation.from_pretrained(
                 model_name, config=config, ignore_mismatched_sizes=True
             )
+
             for name, module in model.backbone.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
                     # Modify the conv layer to accept 6 channels
@@ -55,6 +58,10 @@ class BaselineNet(nn.Module):
                                 / 3.0
                             )
                     module.weight.requires_grad_(True)
+            if freezing_body:
+                print("frozen the backbone")
+                for _, param in model.backbone.named_parameters():
+                    param.requires_grad = False
         elif model_name == "nvidia/mit-b0":
             # https://huggingface.co/docs/transformers/v4.44.2/en/model_doc/segformer#transformers.SegformerForSemanticSegmentation
             original_model = SegformerForSemanticSegmentation.from_pretrained(
@@ -86,6 +93,10 @@ class BaselineNet(nn.Module):
                                 / 3.0
                             )
                     module.weight.requires_grad_(True)
+            if freezing_body:
+                for _, param in model.segformer.encoder.named_parameters():
+                    param.requires_grad = False
+
         elif model_name == "unet":
             model = torch.hub.load(
                 "mateuszbuda/brain-segmentation-pytorch",
@@ -131,6 +142,16 @@ class BaselineNet(nn.Module):
                                 / 3.0
                             )
                     module.weight.requires_grad_(True)
+            if freezing_body:
+                print("Freeze the encoders")
+                for _, param in model.encoder1.named_parameters():
+                    param.requires_grad = False
+                for _, param in model.encoder2.named_parameters():
+                    param.requires_grad = False
+                for _, param in model.encoder3.named_parameters():
+                    param.requires_grad = False
+                for _, param in model.encoder4.named_parameters():
+                    param.requires_grad = False
 
         else:
             raise ValueError(f"Can't find matched model {model_name}.")

@@ -15,6 +15,8 @@ class BaselineNet(nn.Module):
         output_dim=1,
         img_size=224,
         num_frames=1,
+        wave_list=[0.665, 0.56, 0.49],
+        freezing_body=True,
         *args,
         **kwargs,
     ):
@@ -28,7 +30,7 @@ class BaselineNet(nn.Module):
             checkpoint = torch.load(settings.ckp_path.prithvi_100M)
 
             model = Prithvi(
-                in_chans=6,
+                in_chans=input_dim,
                 output_dim=output_dim,
                 img_size=img_size,
                 num_frames=num_frames,
@@ -48,23 +50,8 @@ class BaselineNet(nn.Module):
                 del checkpoint["pos_embed"]
                 del checkpoint["decoder_pos_embed"]
             # Load pretrained weights of encoder
-            model.vit_encoder.load_state_dict(checkpoint, strict=False)
-            # Modify the input layer to receive the input_dim
-            model.vit_encoder.patch_embed.proj = nn.Conv3d(
-                in_channels=input_dim,
-                out_channels=768,
-                kernel_size=(
-                    1,
-                    16,
-                    16,
-                ),
-                stride=(
-                    1,
-                    16,
-                    16,
-                ),
-                bias=True,
-            )
+            msg = model.vit_encoder.load_state_dict(checkpoint, strict=False)
+            print(msg)
 
             # Old patchembed weights and its mean
             original_patch_embed_weights = checkpoint["patch_embed.proj.weight"]
@@ -88,82 +75,93 @@ class BaselineNet(nn.Module):
                             module.weight[:, (integ * 6) :, :, :] = nn.Parameter(
                                 mean_patch_embed_weights.repeat(1, remd, 1, 1, 1) / 3.0
                             )
-                    # Freeze the encoder anf finetune the semantic segmentation head
-                    for _, param in model.vit_encoder.named_parameters():
-                        param.requires_grad = False
-
-        elif model_name == "ibm-nasa-geospatial/prithvi_classifier":
-            from .model_components.prithvi.prithvi import Prithvi, PrithviClassifier
-
-            # If classification task, we use the encoder + classifier
-            checkpoint = torch.load(settings.ckp_path.prithvi_100M)
-            # for k, v in checkpoint.items():
-            #     print(k)
-            model = PrithviClassifier(
-                in_chans=6,
-                output_dim=output_dim,
-                img_size=img_size,
-                num_frames=num_frames,
-                depth=12,
-                embed_dim=768,
-                num_heads=3,
-                patch_size=16,
-                tubelet_size=1,
-            )
-            if self.training:
-                del checkpoint["pos_embed"]
-                del checkpoint["decoder_pos_embed"]
-            # Only load encoder weights
-            model.vit_encoder.load_state_dict(checkpoint, strict=False)
-            # Modify the input layer to receive the input_dim
-            model.vit_encoder.patch_embed.proj = nn.Conv3d(
-                in_channels=input_dim,
-                out_channels=768,
-                kernel_size=(
-                    1,
-                    16,
-                    16,
-                ),
-                stride=(
-                    1,
-                    16,
-                    16,
-                ),
-                bias=True,
-            )
-
-            # Old patchembed weights and its mean
-            original_patch_embed_weights = checkpoint["patch_embed.proj.weight"]
-            mean_patch_embed_weights = original_patch_embed_weights.mean(
-                dim=1, keepdim=True
-            )
-
-            for name, module in model.vit_encoder.named_modules():
-                if isinstance(module, nn.Conv3d) and module.in_channels == input_dim:
-                    # Copy the weight from checkpoint
-                    print(f"copying the weights to {name}")
-                    with torch.no_grad():  # original_conv1.weight.shape)
-                        # Modify the conv layer to accept 6 channels
-                        integ = input_dim // 6
-                        remd = input_dim % 6
-                        module.weight[:, : (integ * 6), :, :] = nn.Parameter(
-                            original_patch_embed_weights.repeat(1, integ, 1, 1, 1)
-                        )
-                        # remaining dimensions are averaged from the original tensor
-                        if remd != 0:
-                            module.weight[:, (integ * 6) :, :, :] = nn.Parameter(
-                                mean_patch_embed_weights.repeat(1, remd, 1, 1, 1) / 3.0
-                            )
-
-            # Freeze the encoder and train a new classifer
-            for _, param in model.vit_encoder.named_parameters():
-                param.requires_grad = False
+                    module.weight.requires_grad_(True)
+            # Freeze the encoder anf finetune the semantic segmentation head
+            if freezing_body:
+                print("Freeze the encoder")
+                for _, param in model.vit_encoder.named_parameters():
+                    param.requires_grad = False
         elif model_name == "xshadow/dofa":
-            from .model_components.DOFA.models_dwv import vit_base_patch16
+            from .model_components.DOFA.models_dwv import Dofa
 
             checkpoint = torch.load(settings.ckp_path.dofa)
-            model = vit_base_patch16(wave_list=[1, 2, 3])
-            model.load_state_dict(checkpoint, strict=False)
+            if self.training:
+                del checkpoint["pos_embed"]
+            model = Dofa(
+                wave_list=wave_list,
+                img_size=img_size,
+                output_dim=output_dim,
+                decoder_norm="batch",
+                decoder_padding="same",
+                decoder_activation="relu",
+                decoder_depths=[2, 2, 8, 2],
+                decoder_dims=[160, 320, 640, 1280],
+            )
+            msg = model.vit_encoder.load_state_dict(checkpoint, strict=False)
+            print(msg)
+            # Freeze the encoder and finetune the semantic segmentation head
+            if freezing_body:
+                print("Freeze the encoder")
+                for _, param in model.vit_encoder.named_parameters():
+                    param.requires_grad = False
+
+        elif model_name == "stanford/satmae":
+            # To do: working on satmae
+            from .model_components.satmae.satmae import SatMAE
+            from .model_components.satmae.training_utils import split_into_three_groups
+
+            checkpoint_model = torch.load(settings.ckp_path.satmae)["model"]
+            model = SatMAE(
+                img_size=img_size,
+                patch_size=8,
+                in_chans=input_dim,
+                output_dim=output_dim,
+                channel_groups=((0, 1), (2, 3), (4, 5)),
+                # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
+                # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
+                channel_embed=256,
+                embed_dim=768,
+                depth=12,
+                num_heads=12,
+                mlp_ratio=4.0,
+                norm_pix_loss=False,
+                decoder_norm="batch",
+                decoder_padding="same",
+                decoder_activation="relu",
+                decoder_depths=[2, 2, 8, 2],
+                decoder_dims=[160, 320, 640, 1280],
+            )
+            # load pre-trained model weights
+            msg = model.vit_encoder.load_state_dict(checkpoint_model, strict=False)
+            print(msg)
+
+            # Old patchembed weights and its mean
+            original_patch_embed_weights = checkpoint_model["patch_embed.proj.weight"]
+            mean_patch_embed_weights = original_patch_embed_weights.mean(
+                dim=1, keepdim=True
+            )
+
+            for name, module in model.vit_encoder.named_modules():
+                if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
+                    # Copy the weight from checkpoint
+                    print(f"copying the weights to {name}")
+                    with torch.no_grad():  # original_conv1.weight.shape)
+                        integ = input_dim // 10
+                        remd = input_dim % 10
+                        module.weight[:, : (integ * 10), :, :] = nn.Parameter(
+                            original_patch_embed_weights.repeat(1, integ, 1, 1, 1)
+                        )
+                        # remaining dimensions are averaged from the original tensor
+                        if remd != 0:
+                            module.weight[:, (integ * 10) :, :, :] = nn.Parameter(
+                                mean_patch_embed_weights.repeat(1, remd, 1, 1, 1) / 3.0
+                            )
+                    module.weight.requires_grad_(True)
+            # Freeze the encoder and finetune the semantic segmentation head
+            if freezing_body:
+                print("Freeze the encoder")
+                for _, param in model.vit_encoder.named_parameters():
+                    param.requires_grad = False
 
         else:
             raise ValueError(f"Can't find matched model {model_name}.")
@@ -201,14 +199,15 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = BaselineNet(
-        model_name="ibm-nasa-geospatial/prithvi",
+        model_name="xshadow/dofa",
         input_dim=6,
-        output_dim=1,
+        output_dim=2,
         img_size=512,
         num_frames=1,
+        wave_list=[1, 2, 3, 4, 5, 6],
     ).to(device)
     # The model accepts remote sensing data in a video format (B, C, T, H, W)
-    x = torch.randn(1, 6, 1, 512, 512)
+    x = torch.randn(1, 6, 512, 512)
     x = x.to(device)
     y = model.forward(x)
     print("output", y.shape)  # (1,1,512,512)

@@ -70,7 +70,6 @@ class IMGTrain:
                 model.train()
 
                 # Note the input and target need to be normalized (done within the function)
-                # Call the model and get the output
                 x = train_data["x"].to(device)  # (b, 1, w, h)
                 # Move mask to the device and concatenate with x if present in train_data
                 mask = train_data.get("mask")
@@ -143,10 +142,11 @@ class IMGTrain:
             #         else:
             #             if i >= best_epoch + patience * val_interval:
             #                 break
-            last_state = {key: value.cpu() for key, value in model.state_dict().items()}
-            file_path = os.path.join(ckp_path, "last_model.pth")
-            with open(file_path, "wb") as f:
-                torch.save(last_state, f)
+        last_state = {key: value.cpu() for key, value in model.state_dict().items()}
+        file_path = os.path.join(ckp_path, "last_model.pth")
+        with open(file_path, "wb") as f:
+            torch.save(last_state, f)
+
         best_epoch = i
         file_path = os.path.join(ckp_path, "best_model.pth")
         with open(file_path, "wb") as f:
@@ -293,49 +293,44 @@ class FireTrain(IMGTrain):
                 if not os.path.exists(csv_path):
                     os.makedirs(csv_path)
 
-                # mean = np.array([stats["means"][i] for i in [5, 3, 2]])
-                # std = np.array([stats["stds"][i] for i in [5, 3, 2]])
-                #
-                # target_test = y_test.detach().cpu().numpy()[0, 0]
-                # # only visualize the 1st item of a batch
-                # x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
-                # output_test = pred_test.detach().cpu().numpy()[0]
-                #
-                # fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                # normBackedData = x_test * std[:, None, None] + mean[:, None, None]
-                # normBackedData = (normBackedData - np.amin(normBackedData)) / (
-                #     np.amax(normBackedData) - np.amin(normBackedData)
-                # )
-                # im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
-                # plt.colorbar(im, ax=axes[0])
-                # axes[0].set_title("input")
-                #
-                # im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
-                # plt.colorbar(im, ax=axes[1])
-                # axes[1].set_title("target")
-                #
-                # im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
-                # plt.colorbar(im, ax=axes[2])
-                # axes[2].set_title("pred")
-                #
-                # png_path = save_path / model_id / "png"
-                # if not os.path.exists(png_path):
-                #     os.makedirs(png_path)
-                # st = test_data["meta_info"][0]
-                # plt.savefig(f"{png_path}/test_pred_{st}.png")
-                # plt.close()
+                if id % 10 == 0:
+                    mean = np.array([stats["means"][i] for i in [5, 3, 2]])
+                    std = np.array([stats["stds"][i] for i in [5, 3, 2]])
+
+                    target_test = y_test.detach().cpu().numpy()[0, 0]
+                    # only visualize the 1st item of a batch
+                    x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
+                    output_test = pred_test.detach().cpu().numpy()[0]
+
+                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                    normBackedData = x_test * std[:, None, None] + mean[:, None, None]
+                    normBackedData = (normBackedData - np.amin(normBackedData)) / (
+                        np.amax(normBackedData) - np.amin(normBackedData)
+                    )
+                    im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
+                    plt.colorbar(im, ax=axes[0])
+                    axes[0].set_title("input")
+
+                    im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
+                    plt.colorbar(im, ax=axes[1])
+                    axes[1].set_title("target")
+
+                    im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
+                    plt.colorbar(im, ax=axes[2])
+                    axes[2].set_title("pred")
+
+                    png_path = save_path / model_id / "png"
+                    if not os.path.exists(png_path):
+                        os.makedirs(png_path)
+                    st = test_data["meta_info"][0]
+                    plt.savefig(f"{png_path}/test_pred_{st}.png")
+                    plt.close()
 
                 total_loss += loss
             total_loss = total_loss / id
 
             final_pred = torch.cat(total_pred, dim=0)
             final_gt = torch.cat(total_gt, dim=0)
-
-            f1_weighted = f1_score(
-                final_pred.detach().cpu().numpy(),
-                final_gt.detach().cpu().numpy(),
-                average="weighted",
-            )
 
             f1_unweighted = test_f1(
                 final_pred.detach().cpu(),
@@ -351,7 +346,6 @@ class FireTrain(IMGTrain):
         return {
             "total_loss": total_loss,
             "f1": f1_unweighted,
-            "m_f1": f1_weighted,
             "IoU": iou_unweighted,
         }
 

@@ -79,14 +79,15 @@ class Prithvi(nn.Module):
     def forward(self, x):
         if x.dim() == 4:  # if input has no T dim, expand it
             x = x[:, :, None, :, :]
-        x = self.vit_encoder(x)
-
+        x = self.vit_encoder(
+            x
+        )  # 1, 1025, 768 (b, sequence length (flattened_patches)+cls, embed_dim )
         # remove cls token
-        x = x[:, 1:, :]
+        x = x[:, 1:, :]  # 1, 1024, 768
         # reshape into 2d features
-        x = self.reshape(x)
-        x = self.decoder_downsample_block(x)
-        x = self.decoder_head(x)
+        x = self.reshape(x)  # 1, 768, 32, 32
+        x = self.decoder_downsample_block(x)  # [1, 768, 32, 32]
+        x = self.decoder_head(x)  # [1, 2, 512, 512]
         return x
 
 
@@ -147,44 +148,23 @@ class PrithviClassifier(nn.Module):
 
 
 if __name__ == "__main__":
-    # main()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    CURR_FOLDER_PATH = Path(__file__).parent.parent  # "/home/EarthExtreme-Bench"
-    SAVE_PATH = CURR_FOLDER_PATH / "results" / "Prithvi_100M"
-    checkpoint = torch.load(
-        "/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt"
-    )
-
-    model = prithvi(
-        checkpoint,
-        output_dim=1,
+    model = Prithvi(
+        in_chans=6,
+        output_dim=2,
+        img_size=512,
+        num_frames=1,
         decoder_norm="batch",
         decoder_padding="same",
         decoder_activation="relu",
         decoder_depths=[2, 2, 8, 2],
         decoder_dims=[160, 320, 640, 1280],
-        freeze_body=True,
-        classifier=False,
-        inference=False,
+        depth=12,
+        embed_dim=768,
+        num_heads=3,
+        patch_size=16,
+        tubelet_size=1,
     )
-    model.load_state_dict(torch.load(SAVE_PATH / "heatwave" / "best_model_200.pth"))
-
     model = model.to(device)
-
-    import utils.dataset.era5_extreme_t2m_dataloader as ext
-
-    heatwave = ext.HeateaveDataloader(
-        batch_size=16,
-        num_workers=0,
-        pin_memory=False,
-        horizon=28,
-        chip_size=224,
-        val_ratio=0.5,
-        data_path="/home/EarthExtreme-Bench/data/weather",
-        persistent_workers=False,
-    )
-
-    train_loader, records = heatwave.train_dataloader()
-    val_loader, _ = heatwave.val_dataloader()
-
-# train and test
+    input = torch.randn((1, 6, 1, 512, 512)).to(device)
+    model.forward(input)

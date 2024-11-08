@@ -30,7 +30,7 @@ class BaselineNet(nn.Module):
             checkpoint = torch.load(settings.ckp_path.prithvi_100M)
 
             model = Prithvi(
-                in_chans=input_dim,
+                in_chans=6,
                 output_dim=output_dim,
                 img_size=img_size,
                 num_frames=num_frames,
@@ -45,7 +45,27 @@ class BaselineNet(nn.Module):
                 patch_size=16,
                 tubelet_size=1,
             )
-
+            if self.training:
+                del checkpoint["pos_embed"]
+                del checkpoint["decoder_pos_embed"]
+            # Load pretrained weights of encoder
+            model.vit_encoder.load_state_dict(checkpoint, strict=False)
+            # Modify the input layer to receive the input_dim
+            model.vit_encoder.patch_embed.proj = nn.Conv3d(
+                in_channels=input_dim,
+                out_channels=768,
+                kernel_size=(
+                    1,
+                    16,
+                    16,
+                ),
+                stride=(
+                    1,
+                    16,
+                    16,
+                ),
+                bias=True,
+            )
             if self.training:
                 del checkpoint["pos_embed"]
                 del checkpoint["decoder_pos_embed"]
@@ -82,7 +102,7 @@ class BaselineNet(nn.Module):
                 for _, param in model.vit_encoder.named_parameters():
                     param.requires_grad = False
         elif model_name == "xshadow/dofa":
-            from .model_components.DOFA.models_dwv import Dofa
+            from .model_components.dofa.models_dwv import Dofa
 
             checkpoint = torch.load(settings.ckp_path.dofa)
             if self.training:
@@ -111,6 +131,7 @@ class BaselineNet(nn.Module):
             from .model_components.satmae.training_utils import split_into_three_groups
 
             checkpoint_model = torch.load(settings.ckp_path.satmae)["model"]
+            del checkpoint_model["pos_embed"]
             model = SatMAE(
                 img_size=img_size,
                 patch_size=8,
@@ -162,7 +183,6 @@ class BaselineNet(nn.Module):
                 print("Freeze the encoder")
                 for _, param in model.vit_encoder.named_parameters():
                     param.requires_grad = False
-
         else:
             raise ValueError(f"Can't find matched model {model_name}.")
 

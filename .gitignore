@@ -171,4 +171,3 @@ __init__.py
 filters/crops_daily_txt
 filters/hdf_crops_daily
 visualize/figures
-wandb/

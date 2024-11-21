@@ -8,11 +8,12 @@ data_path = "/home/EarthExtreme-Bench/data/eo"
 image_file_suffix = "_merged.tif"
 label_file_suffix = ".mask.tif"
 prefix = -11
+wave_list = [0.48, 0.56, 0.65, 0.865, 1.61, 2.2]
 [fire.dataloader]
 in_seq_length = 1
-img_size = 512
+img_size = 224
 val_ratio = 1e-5
-batch_size = 1
+batch_size = 2
 [fire.normalization]
 means=[0.033349706741586264,
        0.05701185520536176,
@@ -31,11 +32,11 @@ stds=[0.02269135568823774,
 [fire.model]
 input_dim = 6
 output_dim = 2
-name = "nvidia/mit-b0"#'ibm-nasa-geospatial/prithvi'#'openmmlab/upernet-convnext-tiny'
+name = "xshadow/dofa_upernet" #stanford/satmae"#'ibm-nasa-geospatial/prithvi'#'openmmlab/upernet-convnext-tiny'
 [fire.train]
-lr = 1.3e-05
+lr = 5e-3
 weight_decay = 5e-6
-num_epochs = 50
+num_epochs = 20
 loss = 'dice'
 patience = 20
 
@@ -44,11 +45,12 @@ data_path = "/home/EarthExtreme-Bench/data/eo"
 image_file_suffix = "_SAR.tif"
 label_file_suffix = "_GT.tif"
 prefix = -8
+wave_list = [3.75, 3.75, 3.75, 3.75, 3.75, 3.75, 3.75, 3.75]
 [flood.dataloader]
 in_seq_length = 1
 img_size = 512
-val_ratio = 0.2
-batch_size = 1
+val_ratio = 1e-5
+batch_size = 2
 [flood.normalization]
 means=[0.23651549,
        0.31761484,
@@ -71,11 +73,11 @@ stds=[0.16280619,
 [flood.model]
 input_dim = 8
 output_dim = 3
-name = "nvidia/mit-b0" # 'openmmlab/upernet-convnext-tiny'
+name = "xshadow/dofa_upernet"# 'openmmlab/upernet-convnext-tiny' "ibm-nasa-geospatial/prithvi"
 [flood.train]
-lr = 0.01
+lr = 5e-3
 weight_decay = 5e-6
-num_epochs = 100
+num_epochs = 30
 loss = 'dice'
 patience = 20
 
@@ -171,14 +173,15 @@ patience = 20
 [heatwave]
 data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = "daily"
+wave_list = [0,1,2,3]
 [heatwave.variables]
 surface = 't2m'
 mask = ['lsm', 'slt', 'z']
 [heatwave.dataloader]
-horizon = 14
+horizon = 10
 in_seq_length = 1
-img_size = 128
-val_ratio = 0.4
+img_size = 224
+val_ratio = 0.01
 batch_size = 16
 [heatwave.normalization]
 mean = 295.2374267578125
@@ -194,11 +197,11 @@ mask_stds = [0.4733320292105142,
 [heatwave.model]
 input_dim = 4
 output_dim = 1
-name = "nvidia/mit-b0"
+name = "ibm-nasa-geospatial/prithvi"
 [heatwave.train]
-lr = 1e-3
-weight_decay = 5e-5
-num_epochs = 100
+lr = 5e-3
+weight_decay = 5e-6
+num_epochs = 20
 loss='l1'
 patience = 20
 
@@ -212,7 +215,7 @@ upper = ['p']
 mask = ['n']
 [storm.normalization]
 pcp_mean = 1.824645369
-pcp_std = 1.122875855
+pcp_std = 4.5466495
 max = 52.5
 noise_mean = 0.7784
 noise_std = 0.4154
@@ -249,8 +252,8 @@ upper = ['p']
 mask = ['n']
 [expcp.normalization]
 max = 104.56
-pcp_mean = 1.159494744
-pcp_std = 0.900219525
+pcp_mean =  1.5899234
+pcp_std = 3.5019548
 [expcp.dataloader]
 img_size = 50
 in_seq_length = 2
@@ -259,8 +262,8 @@ batch_size = 1
 stride = 1
 model_patch = 4
 run_size = 6
-train_date = ["2020-01-01", "2020-01-17"] # 2020-01-01 to 2022-06-30
-val_date = ["2022-01-01", "2022-01-15"] # 2022-07-01 to 2022-12-31
+train_date = ["2021-01-01", "2022-06-30"] # 2020-01-01 to 2022-06-30
+val_date = ["2022-07-01", "2022-12-31"] # 2022-07-01 to 2022-12-31
 test_date = ["2023-01-01", "2023-12-31"] # 2023-01-01 to 2023-12-31
 [expcp.model]
 name = "microsoft/aurora_pcp"

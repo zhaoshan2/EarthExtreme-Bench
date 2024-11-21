@@ -1,4 +1,6 @@
 [ckp_path]
 prithvi_100M ="/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt"
-dofa="/home/data_storage_home/data/disaster/pretrained_model/DOFA_ViT_base_e100.pth"
+dofa="/home/data_storage_home/data/disaster/pretrained_model/DOFA_ViT_base_e120.pth"
 aurora="/home/data_storage_home/data/disaster/pretrained_model/aurora-0.25-pretrained.ckpt"
+satmae="/home/data_storage_home/data/disaster/pretrained_model/pretrain-vit-base-e199.pth"
+climax="/home/data_storage_home/data/disaster/pretrained_model/climax_1.40625deg.ckpt"

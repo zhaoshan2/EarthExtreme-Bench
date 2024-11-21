@@ -1,5 +1,5 @@
 import torch.nn as nn
-from training_utils import get_activation, get_normalization, SE_Block
+from .training_utils import get_activation, get_normalization, SE_Block
 
 
 class CoreCNNBlock(nn.Module):

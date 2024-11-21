@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from typing import Tuple
 
 
 def unlog_tp(x, eps=1e-5):
@@ -565,3 +566,60 @@ class RadarEvaluation(object):
             raise NotImplementedError
             # ssim = self._ssim / self._total_batch_num
         return pod, far, csi, hss, gss, mse, mae, gdl
+
+
+@torch.jit.script
+def top_quantiles_error_torch(
+    pred: torch.Tensor, target: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    qs = 10
+    qlim = 2
+    qcut = 1
+    n, c, h, w = pred.size()
+    qtile = 1.0 - 2 * torch.logspace(
+        -qlim, -qcut, steps=qs, device=pred.device, dtype=target.dtype
+    )
+    P_tar = torch.quantile(target.view(n, c, h * w), q=qtile, dim=-1)
+    qtile = 1.0 - 2 * torch.logspace(
+        -qlim, -qcut, steps=qs, device=pred.device, dtype=pred.dtype
+    )
+    P_pred = torch.quantile(pred.view(n, c, h * w), q=qtile, dim=-1)
+
+    return (qtile, torch.mean((P_pred - P_tar) / P_tar, dim=1))
+
+
+def lower_quantiles_error_torch(
+    pred: torch.Tensor, target: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    qs = 10
+    qlim = 2
+    qcut = 1
+    n, c, h, w = pred.size()
+
+    # Generate quantiles for the lower tail
+    qtile = 2 * torch.logspace(
+        -qlim, -qcut, steps=qs, device=pred.device, dtype=target.dtype
+    )
+
+    # Compute quantiles for the target and predictions
+    P_tar = torch.quantile(target.view(n, c, h * w), q=qtile, dim=-1)
+    qtile = 2 * torch.logspace(
+        -qlim, -qcut, steps=qs, device=pred.device, dtype=pred.dtype
+    )
+    P_pred = torch.quantile(pred.view(n, c, h * w), q=qtile, dim=-1)
+    # Compute the relative error (qs, n, 1)
+    return (qtile, torch.mean((P_pred - P_tar) / P_tar, dim=1))
+
+
+def TQE(pred_real, gt_real):
+    scores = top_quantiles_error_torch(pred_real, gt_real)
+    q = [round(num * 100, 2) for num in scores[0].tolist()]
+    s = [round(num[0], 4) for num in scores[1].tolist()]
+    return q, s
+
+
+def LQE(pred_real, gt_real):
+    scores = lower_quantiles_error_torch(pred_real, gt_real)
+    q = [round(num * 100, 2) for num in scores[0].tolist()]
+    s = [round(num[0], 4) for num in scores[1].tolist()]
+    return q, s

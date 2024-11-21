@@ -467,22 +467,59 @@ def read_yaml(path):
     return AttrDict(params)
 
 
-def split_into_three_groups(a):
-    # Generate the list of numbers from 0 to a-1
-    numbers = list(range(a))
+from typing import List, Optional, Tuple, Union
 
-    # Calculate the size of each group
-    group_size = a // 3
-    remainder = a % 3  # To handle uneven splits
-
-    # Define the sizes of the three groups
-    sizes = [group_size + (1 if i < remainder else 0) for i in range(3)]
-
-    # Split the list based on the sizes calculated
-    groups = []
-    start = 0
-    for size in sizes:
-        groups.append(tuple(numbers[start : start + size]))
-        start += size
-
-    return tuple(groups)
+# class MultiArray_1D(beo.MultiArray):
+#     def __init__(self,
+#                  array_list: List[Union[np.ndarray, np.memmap]],
+#                  shuffle: bool = False,
+#                  random_sampling: bool = False,
+#                  seed: int = 42,
+#                  _idx_start: Optional[int] = None,
+#                  _idx_end: Optional[int] = None,
+#                  _is_subarray: bool = False
+#                  ):
+#         self.array_list = array_list
+#         self.is_subarray = _is_subarray
+#
+#         assert isinstance(self.array_list, list), "Input should be a list of numpy arrays."
+#         assert len(self.array_list) > 0, "Input list is empty. Please provide a list with numpy arrays."
+#         assert all(isinstance(item, (np.ndarray, np.memmap)) for item in
+#                    self.array_list), "Input list should only contain numpy arrays."
+#
+#         self.cumulative_sizes = [i for i in range(len(self.array_list))]
+#
+#         self._idx_start = int(_idx_start) if _idx_start is not None else 0
+#         self._idx_end = int(_idx_end) if _idx_end is not None else int(self.cumulative_sizes[-1])
+#
+#         assert isinstance(self._idx_start, int), "Minimum length should be an integer."
+#         assert isinstance(self._idx_end, int), "Maximum length should be an integer."
+#         assert self._idx_start < self._idx_end, "Minimum length should be smaller than maximum length."
+#
+#         self.total_length = len(
+#             array_list) - 1  # int(min(self.cumulative_sizes[-1], self._idx_end - self._idx_start))  # Store length for faster access
+#
+#         if shuffle and random_sampling:
+#             raise ValueError("Cannot use both shuffling and resevoir sampling at the same time.")
+#
+#         # Shuffling
+#         self.seed = seed
+#         self.shuffle = shuffle
+#         self.shuffle_indices = None
+#         self.random_sampling = random_sampling
+#         self.rng = np.random.default_rng(seed)
+#
+#         if self.shuffle:
+#             self.shuffle_indices = self.rng.permutation(range(self._idx_start, self._idx_end))
+#
+#     def _load_item(self, idx: int):
+#         """ Load an item from the array list. """
+#         # array_idx = np.searchsorted(self.cumulative_sizes, idx, side='right') - 1
+#
+#         # calculated_idx = idx - self.cumulative_sizes[array_idx]
+#         # if calculated_idx < 0 or calculated_idx >= self.array_list[array_idx].shape[0]:
+#         #     raise IndexError(f'Index {idx} out of bounds for MultiArray with length {self.__len__()}')
+#
+#         output = self.array_list[idx]  # [calculated_idx]
+#
+#         return output

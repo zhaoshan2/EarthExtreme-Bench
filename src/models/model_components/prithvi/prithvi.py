@@ -49,7 +49,8 @@ class Prithvi(nn.Module):
             norm_layer=norm_layer,
             norm_pix_loss=norm_pix_loss,
         )
-
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
         # --------------------------------------------------------------------------
         # CNN Decoder Blocks:
         self.depths = decoder_depths

@@ -8,8 +8,9 @@ import numpy as np
 import segmentation_models_pytorch as smp
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import wandb
-from torchmetrics import AUROC, AveragePrecision, JaccardIndex, F1Score
+from torchmetrics import AUROC, AveragePrecision, JaccardIndex, F1Score, Accuracy
 from .utils import logging_utils, score_utils
 from sklearn.metrics import f1_score
 
@@ -77,10 +78,16 @@ class IMGTrain:
                     torch.cat([x, mask.to(device)], dim=1) if mask is not None else x
                 )
                 y_train = train_data["y"].to(device)
+
                 logits = model(
                     x_train
                 )  # (upsampled) logits with the same w,h as inputs (b,c_out,w,h)
-
+                if logits.size()[-2:] != y_train.size()[-2:]:
+                    logits = F.interpolate(
+                        logits,
+                        size=y_train.size()[-2:],
+                        mode="nearest",
+                    )
                 loss = criterion(logits, y_train)
                 # Call the backward algorithm and calculate the gratitude of parameters
                 # scaler.scale(loss).backward()
@@ -142,10 +149,10 @@ class IMGTrain:
             #         else:
             #             if i >= best_epoch + patience * val_interval:
             #                 break
-        last_state = {key: value.cpu() for key, value in model.state_dict().items()}
-        file_path = os.path.join(ckp_path, "last_model.pth")
-        with open(file_path, "wb") as f:
-            torch.save(last_state, f)
+            last_state = {key: value.cpu() for key, value in model.state_dict().items()}
+            file_path = os.path.join(ckp_path, "last_model.pth")
+            with open(file_path, "wb") as f:
+                torch.save(last_state, f)
 
         best_epoch = i
         file_path = os.path.join(ckp_path, "best_model.pth")
@@ -164,10 +171,12 @@ class ExtremeTemperatureTrain(IMGTrain):
 
     def test(self, model, data, device, stats, save_path, model_id, **kwargs):
         test_loader, META_INFO = data.test_dataloader()
-        rmse, acc = dict(), dict()
+        rmse, rmse_normalized, cc = dict(), dict(), dict()
         criterion = nn.L1Loss()
         total_loss = 0
         # turn off gradient tracking for evaluation
+        total_preds = []
+        total_targets = []
         with torch.no_grad():
             # iterate through test data
             for id, test_data in enumerate(test_loader):
@@ -183,25 +192,35 @@ class ExtremeTemperatureTrain(IMGTrain):
                 logits_test = model(x_test)  # (1, 1, 100, 100)
                 loss = criterion(logits_test, y_test)
 
-                # print("Test loss: {:.5f}".format(loss))
-                # pred_test = pred_test.squeeze()
-                # y_test = y_test.squeeze()
-                acc[target_time] = (
+                # rmse
+                csv_path = save_path / model_id / "csv"
+                if not os.path.exists(csv_path):
+                    os.makedirs(csv_path)
+                # This computes the correlation coefficient between the normalized prediction and normalized target
+                # It will return the same results as using acc(a*std, b*std)
+                cc[target_time] = (
                     score_utils.unweighted_acc_torch(logits_test, y_test)
                     .detach()
                     .cpu()
                     .numpy()[0]
                 )
-                # rmse
-                csv_path = save_path / model_id / "csv"
-                if not os.path.exists(csv_path):
-                    os.makedirs(csv_path)
-
+                # Compute the RMSE in the original data range
                 output_test = logits_test * stats["std"] + stats["mean"]
                 target_test = y_test * stats["std"] + stats["mean"]
 
+                total_preds.append(output_test)
+                total_targets.append(target_test)
+
                 rmse[target_time] = (
                     score_utils.unweighted_rmse_torch(output_test, target_test)
+                    .detach()
+                    .cpu()
+                    .numpy()[0]
+                )  # returns channel-wise score mean over w,h,b
+
+                # compute the rmse on the normalized space
+                rmse_normalized[target_time] = (
+                    score_utils.unweighted_rmse_torch(logits_test, y_test)
                     .detach()
                     .cpu()
                     .numpy()[0]
@@ -212,32 +231,73 @@ class ExtremeTemperatureTrain(IMGTrain):
                 target_test = target_test.detach().cpu().numpy()
                 x = x.detach().cpu().numpy()
                 output_test = output_test.detach().cpu().numpy()
-                fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                im = axes[0].imshow(x[-2:])
-                plt.colorbar(im, ax=axes[0])
-                axes[0].set_title("input")
-
-                im = axes[1].imshow(target_test[-2:])
-                plt.colorbar(im, ax=axes[1])
-                axes[1].set_title("target")
-
-                im = axes[2].imshow(output_test[-2:])
-                plt.colorbar(im, ax=axes[2])
-                axes[2].set_title("pred")
 
                 png_path = save_path / model_id / "png"
                 if not os.path.exists(png_path):
                     os.makedirs(png_path)
-                plt.savefig(f"{png_path}/test_pred_{target_time}.png")
-                plt.close(fig)
+                if id % 20 == 0:
+                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                    im = axes[0].imshow(x[0, 0])
+                    plt.colorbar(im, ax=axes[0])
+                    axes[0].set_title("input")
+
+                    im = axes[1].imshow(target_test[0, 0])
+                    plt.colorbar(im, ax=axes[1])
+                    axes[1].set_title("target")
+
+                    im = axes[2].imshow(output_test[0, 0])
+                    plt.colorbar(im, ax=axes[2])
+                    axes[2].set_title("pred")
+
+                    plt.savefig(f"{png_path}/test_pred_{target_time}.png")
+                    plt.close(fig)
                 # Save rmses to csv
 
                 total_loss += loss
             total_loss = total_loss / id
-            logging_utils.save_errorScores(csv_path, acc, "acc")
+            logging_utils.save_errorScores(csv_path, cc, "cc")
             logging_utils.save_errorScores(csv_path, rmse, "rmse")
+            logging_utils.save_errorScores(csv_path, rmse_normalized, "nrmse")
 
-        return total_loss
+            total_preds = torch.cat(total_preds, dim=0)
+            total_targets = torch.cat(total_targets, dim=0)
+
+            tq, tqe = score_utils.TQE(total_preds, total_targets)
+            lq, lqe = score_utils.LQE(total_preds, total_targets)
+
+            # Plot histograms
+            plt.figure(figsize=(10, 5))
+            total_preds = total_preds.view(-1).detach().cpu().numpy()
+            total_targets = total_targets.view(-1).detach().cpu().numpy()
+            plt.hist(
+                total_preds,
+                bins=100,
+                range=(np.amin(total_targets), np.amax(total_targets)),
+                alpha=0.5,
+                label="Predictions",
+                color="red",
+            )
+            plt.hist(
+                total_targets,
+                bins=100,
+                range=(np.amin(total_targets), np.amax(total_targets)),
+                alpha=0.5,
+                label="Ground truth",
+                color="black",
+            )
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
+            plt.legend()
+            plt.grid()
+            plt.savefig(f"{png_path}/histogram.png")
+
+        return {
+            "total loss": total_loss,
+            "top quantiles": tq,
+            "top quantiles scores": tqe,
+            "low quantiles": lq,
+            "low quantiles scores": lqe,
+        }
 
 
 class FireTrain(IMGTrain):
@@ -251,6 +311,8 @@ class FireTrain(IMGTrain):
         # Initialize F1 score metric from torchmetrics
         test_f1 = F1Score(num_classes=2, task="binary")
         test_IoU = JaccardIndex(task="multiclass", num_classes=2)
+        test_macromIoU = JaccardIndex(task="multiclass", num_classes=2, average="macro")
+        test_macromAcc = Accuracy(task="multiclass", num_classes=2, average="macro")
         criterion = smp.losses.DiceLoss(mode="multiclass")
         total_loss = 0
         total_pred, total_gt = [], []
@@ -267,6 +329,12 @@ class FireTrain(IMGTrain):
                 y_test = test_data["y"].to(device)  # b1hw
                 model.eval()
                 logits_test = model(x_test)
+                if logits_test.size()[-2:] != y_test.size()[-2:]:
+                    logits_test = F.interpolate(
+                        logits_test,
+                        size=y_test.size()[-2:],
+                        mode="nearest",
+                    )
                 loss = criterion(logits_test, y_test)
 
                 pred_test = torch.nn.functional.softmax(logits_test, dim=1)  # b2hw
@@ -293,38 +361,38 @@ class FireTrain(IMGTrain):
                 if not os.path.exists(csv_path):
                     os.makedirs(csv_path)
 
-                if id % 10 == 0:
-                    mean = np.array([stats["means"][i] for i in [5, 3, 2]])
-                    std = np.array([stats["stds"][i] for i in [5, 3, 2]])
-
-                    target_test = y_test.detach().cpu().numpy()[0, 0]
-                    # only visualize the 1st item of a batch
-                    x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
-                    output_test = pred_test.detach().cpu().numpy()[0]
-
-                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                    normBackedData = x_test * std[:, None, None] + mean[:, None, None]
-                    normBackedData = (normBackedData - np.amin(normBackedData)) / (
-                        np.amax(normBackedData) - np.amin(normBackedData)
-                    )
-                    im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
-                    plt.colorbar(im, ax=axes[0])
-                    axes[0].set_title("input")
-
-                    im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
-                    plt.colorbar(im, ax=axes[1])
-                    axes[1].set_title("target")
-
-                    im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
-                    plt.colorbar(im, ax=axes[2])
-                    axes[2].set_title("pred")
-
-                    png_path = save_path / model_id / "png"
-                    if not os.path.exists(png_path):
-                        os.makedirs(png_path)
-                    st = test_data["meta_info"][0]
-                    plt.savefig(f"{png_path}/test_pred_{st}.png")
-                    plt.close()
+                # if id % 10 == 0:
+                #     mean = np.array([stats["means"][i] for i in [5, 3, 2]])
+                #     std = np.array([stats["stds"][i] for i in [5, 3, 2]])
+                #
+                #     target_test = y_test.detach().cpu().numpy()[0, 0]
+                #     # only visualize the 1st item of a batch
+                #     x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
+                #     output_test = pred_test.detach().cpu().numpy()[0]
+                #
+                #     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                #     normBackedData = x_test * std[:, None, None] + mean[:, None, None]
+                #     normBackedData = (normBackedData - np.amin(normBackedData)) / (
+                #         np.amax(normBackedData) - np.amin(normBackedData)
+                #     )
+                #     im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
+                #     plt.colorbar(im, ax=axes[0])
+                #     axes[0].set_title("input")
+                #
+                #     im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
+                #     plt.colorbar(im, ax=axes[1])
+                #     axes[1].set_title("target")
+                #
+                #     im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
+                #     plt.colorbar(im, ax=axes[2])
+                #     axes[2].set_title("pred")
+                #
+                #     png_path = save_path / model_id / "png"
+                #     if not os.path.exists(png_path):
+                #         os.makedirs(png_path)
+                #     st = test_data["meta_info"][0]
+                #     plt.savefig(f"{png_path}/test_pred_{st}.png")
+                #     plt.close()
 
                 total_loss += loss
             total_loss = total_loss / id
@@ -336,17 +404,23 @@ class FireTrain(IMGTrain):
                 final_pred.detach().cpu(),
                 final_gt.detach().cpu(),
             )
-            iou_unweighted = test_IoU(
+            # iou_unweighted = test_IoU(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # )
+            miou_macro = test_macromIoU(
                 final_pred.detach().cpu(), final_gt.detach().cpu()
             )
-
+            macc_macro = test_macromAcc(
+                final_pred.detach().cpu(), final_gt.detach().cpu()
+            )
             logging_utils.save_errorScores(csv_path, f1, "f1")
             logging_utils.save_errorScores(csv_path, IoU, "IoU")
 
         return {
             "total_loss": total_loss,
             "f1": f1_unweighted,
-            "IoU": iou_unweighted,
+            "macro_mIoU": miou_macro,
+            "macro_mAcc": macc_macro,
         }
 
 
@@ -354,16 +428,26 @@ class FloodTrain(IMGTrain):
     def __init__(self, disaster):
         super().__init__(disaster)
 
-    def test(self, model, test_loader, device, stats, save_path, model_id, **kwargs):
+    def test(self, model, data, device, stats, save_path, model_id, **kwargs):
+        test_loader, META_INFO = data.test_dataloader()
         # turn off gradient tracking for evaluation
         f1, IoU = dict(), dict()
         test_f1 = F1Score(
             task="multiclass", num_classes=3, average=None
         )  # [f1_cls0, f1_cls1, f1_cls2]
         test_f1_weighted = F1Score(
-            task="multiclass", num_classes=3, average="weighted"
+            task="multiclass", num_classes=3, average="weighted", ignore_index=0
         )  # single number
-        test_IoU = JaccardIndex(task="multiclass", num_classes=3)  # single number
+        test_f1_macro = F1Score(
+            task="multiclass", num_classes=3, average="macro", ignore_index=0
+        )  # single number
+        test_IoU = JaccardIndex(task="multiclass", num_classes=3, average=None)
+        test_IoU_macro = JaccardIndex(
+            task="multiclass", num_classes=3, average="macro", ignore_index=0
+        )  # single number
+        test_IoU_weighted = JaccardIndex(
+            task="multiclass", num_classes=3, average="weighted", ignore_index=0
+        )  # single number
 
         criterion = smp.losses.DiceLoss(mode="multiclass")
         total_loss = 0
@@ -376,73 +460,85 @@ class FloodTrain(IMGTrain):
                 x_test = (
                     torch.cat([x, mask.to(device)], dim=1) if mask is not None else x
                 )
-                y_test = test_data["y"].to(device).int()
+                y_test = test_data["y"].to(device)
                 model.eval()
                 logits_test = model(x_test)
+                if logits_test.size()[-2:] != y_test.size()[-2:]:
+                    logits_test = F.interpolate(
+                        logits_test,
+                        size=y_test.size()[-2:],
+                        mode="nearest",
+                    )
                 loss = criterion(logits_test, y_test)
                 pred_test = torch.nn.functional.softmax(logits_test, dim=1)
                 pred_test = torch.argmax(pred_test, dim=1).int()
 
                 total_pred.append(pred_test.flatten())
-                total_gt.append(y_test.squeeze(1).flatten())
+                total_gt.append(y_test.squeeze(1).int().flatten())
                 # f1 for each sample [f1_cls0, f1_cls1, f1_cls2]
-                f1s = test_f1(
-                    pred_test.detach().cpu().flatten(),
-                    y_test.squeeze(1).detach().cpu().flatten(),
-                ).numpy()
-                # IoU for each sample
-                ious = test_IoU(
-                    pred_test.detach().cpu().flatten(),
-                    y_test.squeeze(1).detach().cpu().flatten(),
-                ).numpy()
-
-                f1[test_data["meta_info"][0]] = f1s
-                IoU[test_data["meta_info"][0]] = ious
+                # f1s = test_f1(
+                #     pred_test.detach().cpu().flatten(),
+                #     y_test.squeeze(1).detach().cpu().flatten(),
+                # ).numpy()
+                # # IoU for each sample
+                # ious = test_IoU(
+                #     pred_test.detach().cpu().flatten(),
+                #     y_test.squeeze(1).detach().cpu().flatten(),
+                # ).numpy()
+                #
+                # f1[test_data["meta_info"][0]] = f1s
+                # IoU[test_data["meta_info"][0]] = ious
 
                 csv_path = save_path / model_id / "csv"
                 if not os.path.exists(csv_path):
                     os.makedirs(csv_path)
-                # mean = np.array([stats["means"][i] for i in [0, 1, 2]])
-                # std = np.array([stats["stds"][i] for i in [0, 1, 2]])
+
+                # if id % 10 == 0:
+                #     mean = np.array([stats["means"][i] for i in [0, 1, 2]])
+                #     std = np.array([stats["stds"][i] for i in [0, 1, 2]])
                 #
-                # target_test = y_test.detach().cpu().numpy()[0, 0]
-                # # only visualize the 1st item of a batch
-                # x_test = x_test.detach().cpu().numpy()[:, [0, 1, 2], :, :][0]
-                # output_test = pred_test.detach().cpu().numpy()[0]
-                # fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                # normBackedData = x_test * std[:, None, None] + mean[:, None, None]
-                # normBackedData = (normBackedData - np.amin(normBackedData)) / (
-                #     np.amax(normBackedData) - np.amin(normBackedData)
-                # )
-                # im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
-                # plt.colorbar(im, ax=axes[0])
-                # axes[0].set_title("input")
+                #     target_test = y_test.detach().cpu().numpy()[0, 0]
+                #     # only visualize the 1st item of a batch
+                #     x_test = x_test.detach().cpu().numpy()[:, [0, 1, 2], :, :][0]
+                #     output_test = pred_test.detach().cpu().numpy()[0]
+                #     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                #     normBackedData = x_test * std[:, None, None] + mean[:, None, None]
+                #     normBackedData = (normBackedData - np.amin(normBackedData)) / (
+                #         np.amax(normBackedData) - np.amin(normBackedData)
+                #     )
+                #     im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
+                #     plt.colorbar(im, ax=axes[0])
+                #     axes[0].set_title("input")
                 #
-                # im = axes[1].imshow(target_test, vmin=0, vmax=2.0)
-                # plt.colorbar(im, ax=axes[1])
-                # axes[1].set_title("target")
+                #     im = axes[1].imshow(target_test, vmin=0, vmax=2.0)
+                #     plt.colorbar(im, ax=axes[1])
+                #     axes[1].set_title("target")
                 #
-                # im = axes[2].imshow(output_test, vmin=0, vmax=2.0)
-                # plt.colorbar(im, ax=axes[2])
-                # axes[2].set_title("pred")
+                #     im = axes[2].imshow(output_test, vmin=0, vmax=2.0)
+                #     plt.colorbar(im, ax=axes[2])
+                #     axes[2].set_title("pred")
                 #
-                # png_path = save_path / model_id / "png"
-                # if not os.path.exists(png_path):
-                #     os.makedirs(png_path)
-                # st = test_data["meta_info"][0]
-                # plt.savefig(f"{png_path}/test_pred_{st}.png")
-                # plt.close()
+                #     png_path = save_path / model_id / "png"
+                #     if not os.path.exists(png_path):
+                #         os.makedirs(png_path)
+                #     st = test_data["meta_info"][0]
+                #     plt.savefig(f"{png_path}/test_pred_{st}.png")
+                #     plt.close()
 
                 total_loss += loss
             total_loss = total_loss / id
 
-            logging_utils.save_errorScores(csv_path, f1, "f1")
-            logging_utils.save_errorScores(csv_path, IoU, "IoU")
+            # logging_utils.save_errorScores(csv_path, f1, "f1")
+            # logging_utils.save_errorScores(csv_path, IoU, "IoU")
 
             final_pred = torch.cat(total_pred, dim=0)
             final_gt = torch.cat(total_gt, dim=0)
-            # pixel-wise weighted f1
+            # pixel-wise weighted average f1
             f1_weighted = test_f1_weighted(
+                final_pred.detach().cpu(), final_gt.detach().cpu()
+            ).numpy()
+            # pixel-wise marco average f1
+            f1_macro = test_f1_macro(
                 final_pred.detach().cpu(), final_gt.detach().cpu()
             ).numpy()
             # pixel-wise f1
@@ -450,16 +546,27 @@ class FloodTrain(IMGTrain):
                 final_pred.detach().cpu(),
                 final_gt.detach().cpu(),
             ).numpy()
+
             # pixel-wise IoU
             iou_unweighted = test_IoU(
                 final_pred.detach().cpu(), final_gt.detach().cpu()
             ).numpy()
-
+            # pixel-wise weighted average IoU
+            iou_weighted = test_IoU_weighted(
+                final_pred.detach().cpu(), final_gt.detach().cpu()
+            ).numpy()
+            # pixel-wise macro average IoU
+            iou_macro = test_IoU_macro(
+                final_pred.detach().cpu(), final_gt.detach().cpu()
+            ).numpy()
         return {
             "total_loss": total_loss,
             "f1": f1_unweighted,
-            "m_f1": f1_weighted,
+            "mF1_weighted": f1_weighted,
+            "mF1_macro": f1_macro,
             "IoU": iou_unweighted,
+            "mIoU_weighted": iou_weighted,
+            "mIoU_macro": iou_macro,
         }
 
 

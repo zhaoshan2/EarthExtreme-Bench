@@ -143,9 +143,12 @@ class ViTGroupedChannelsEncoder(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)  # (N, G*L + 1, D)
 
         # apply Transformer blocks
+
         for blk in self.blocks:
-            x = checkpoint.checkpoint(blk, x)
-            # x = blk(x)
+            if self.training:
+                x = checkpoint.checkpoint(blk, x)
+            else:
+                x = blk(x)
         x = self.norm(x)
 
         # # remove cls token
@@ -183,6 +186,7 @@ class SatMAE(nn.Module):
 
         self.in_c = in_chans
         self.patch_size = patch_size
+        self.embed_dim = embed_dim
         self.channel_groups = channel_groups
         self.output_dim = output_dim
         num_groups = len(channel_groups)
@@ -300,11 +304,11 @@ def vit_huge(**kwargs):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = SatMAE(
-        img_size=512,
+        img_size=96,
         patch_size=8,
-        in_chans=6,
+        in_chans=11,
         output_dim=2,
-        channel_groups=((0, 1), (2, 3), (4, 5)),
+        channel_groups=((0, 1, 2, 3), (4, 5, 6, 7), (8, 9, 10)),
         # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
         # groups: (i) RGB+NIR - B2, B3, B4, B8 (ii) Red Edge - B5, B6, B7, B8A (iii) SWIR - B11, B12,
         channel_embed=256,
@@ -319,7 +323,24 @@ if __name__ == "__main__":
         decoder_depths=[2, 2, 8, 2],
         decoder_dims=[160, 320, 640, 1280],
     )
-    model = model.to(device)
-    input = torch.randn((1, 6, 512, 512)).to(device)
-    output = model.forward(input)
-    print("Output", output.shape)
+
+    """
+    vit_encoder.patch_embed.0.proj.weight torch.Size([768, 2, 8, 8])
+    vit_encoder.patch_embed.0.proj.bias torch.Size([768])
+    """
+    checkpoint_model = torch.load(
+        "/home/data_storage_home/data/disaster/pretrained_model/pretrain-vit-base-e199.pth"
+    )["model"]
+    for name, param in checkpoint_model.items():
+        print(name, param.shape)
+    del checkpoint_model["pos_embed"]
+    """
+    patch_embed.0.proj.weight torch.Size([768, 4, 8, 8])
+    patch_embed.0.proj.bias torch.Size([768])
+    """
+    msg = model.vit_encoder.load_state_dict(checkpoint_model, strict=False)
+    print(msg)
+    # model = model.to(device)
+    # input = torch.randn((1, 6, 512, 512)).to(device)
+    # output = model.forward(input)
+    # print("Output", output.shape)

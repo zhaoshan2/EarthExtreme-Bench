@@ -5,9 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from mmseg.models.necks import Feature2Pyramid
+from mmseg.models.decode_heads import UPerHead, FCNHead
 from timm.models.vision_transformer import PatchEmbed, Block
 from .wave_dynamic_layer import Dynamic_MLP_OFA, Dynamic_MLP_Decoder
-from .decoder import CoreDecoder
 
 
 def resize(
@@ -43,6 +44,7 @@ class OFAViT(nn.Module):
     def __init__(
         self,
         img_size=224,
+        out_indices=[3, 5, 7, 11],
         patch_size=16,
         drop_rate=0.0,
         embed_dim=1024,
@@ -95,8 +97,11 @@ class OFAViT(nn.Module):
         self.wave_list = wave_list
         self.embed_dim = embed_dim
         self.img_size = img_size
+        self.out_indices = out_indices
 
     def forward_features(self, x):
+        hw = self.img_size // self.patch_embed.kernel_size
+        hw_shape = (hw, hw)
         # embed patches
         wave_list = self.wave_list
         wavelist = torch.tensor(wave_list, device=x.device).float()
@@ -110,11 +115,20 @@ class OFAViT(nn.Module):
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
 
+        out_features = []
         # apply Transformer blocks
-        for block in self.blocks:
-            x = block(x)
-        x = self.norm(x)
-        return x
+        for i, blk in enumerate(self.blocks):
+            x = blk(x)
+            if i in self.out_indices:
+                out = x[:, 1:]
+                B, _, C = out.shape
+                out = (
+                    out.reshape(B, hw_shape[0], hw_shape[1], C)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )
+                out_features.append(out)
+        return out_features
 
     def forward_head(self, x, pre_logits=False):
         x = self.head_drop(x)
@@ -151,6 +165,7 @@ def vit_small_patch16(wave_list, img_size, **kwargs):
 def vit_base_patch16(wave_list, img_size, **kwargs):
     model = OFAViT(
         img_size=img_size,
+        out_indices=[3, 5, 7, 11],
         patch_size=16,
         embed_dim=768,
         depth=12,
@@ -166,6 +181,7 @@ def vit_base_patch16(wave_list, img_size, **kwargs):
 def vit_large_patch16(wave_list, img_size, **kwargs):
     model = OFAViT(
         img_size=img_size,
+        out_indices=[7, 11, 15, 23],
         patch_size=16,
         embed_dim=1024,
         depth=24,
@@ -181,6 +197,7 @@ def vit_large_patch16(wave_list, img_size, **kwargs):
 def vit_huge_patch14(wave_list, img_size, **kwargs):
     model = OFAViT(
         img_size=img_size,
+        out_indices=[7, 15, 23, 31],
         patch_size=14,
         embed_dim=1280,
         depth=32,
@@ -193,6 +210,25 @@ def vit_huge_patch14(wave_list, img_size, **kwargs):
     return model
 
 
+class UperNet(torch.nn.Module):
+    def __init__(self, backbone, neck, decode_head, aux_head):
+        super(UperNet, self).__init__()
+        self.backbone = backbone
+        self.neck = neck
+        self.decode_head = decode_head
+        self.aux_head = aux_head
+
+    def forward(self, x):
+        feat = self.backbone.forward_features(x)
+
+        feat = self.neck(feat)
+        out = self.decode_head(feat)
+        out = resize(out, size=x.shape[2:], mode="bilinear", align_corners=False)
+        out_a = self.aux_head(feat)
+        out_a = resize(out_a, size=x.shape[2:], mode="bilinear", align_corners=False)
+        return out, out_a
+
+
 class Dofa(nn.Module):
 
     def __init__(
@@ -200,11 +236,6 @@ class Dofa(nn.Module):
         wave_list=[0.665, 0.56, 0.49],
         img_size=512,
         output_dim=1,
-        decoder_norm="batch",
-        decoder_padding="same",
-        decoder_activation="relu",
-        decoder_depths=[2, 2, 8, 2],
-        decoder_dims=[160, 320, 640, 1280],
         **kwargs,
     ):
         super().__init__()
@@ -212,24 +243,49 @@ class Dofa(nn.Module):
         # --------------------------------------------------------------------------
         # encoder specifics
         self.vit_encoder = vit_base_patch16(wave_list=wave_list, img_size=img_size)
-        # self.vit_encoder = vit_large_patch16(wave_list=wave_list, img_size=img_size)
+
         # --------------------------------------------------------------------------
-        # CNN Decoder Blocks:
-        self.depths = decoder_depths
-        self.dims = decoder_dims
+
         self.output_dim = output_dim
 
-        self.decoder_head = CoreDecoder(
-            embedding_dim=self.vit_encoder.embed_dim,
-            output_dim=output_dim,
-            depths=decoder_depths,
-            dims=decoder_dims,
-            activation=decoder_activation,
-            padding=decoder_padding,
-            norm=decoder_norm,
+        edim = self.vit_encoder.embed_dim
+
+        self.neck = Feature2Pyramid(
+            embed_dim=edim,
+            rescales=[4, 2, 1, 0.5],
         )
 
-        self.decoder_downsample_block = nn.Identity()
+        self.decoder = UPerHead(
+            in_channels=[edim, edim, edim, edim],
+            in_index=[0, 1, 2, 3],
+            pool_scales=(1, 2, 3, 6),
+            channels=512,
+            dropout_ratio=0.1,
+            num_classes=output_dim,
+            norm_cfg=dict(type="SyncBN", requires_grad=True),
+            align_corners=False,
+            loss_decode=dict(
+                type="CrossEntropyLoss", use_sigmoid=False, loss_weight=1.0
+            ),
+        )
+        self.aux_head = FCNHead(
+            in_channels=edim,
+            in_index=2,
+            channels=256,
+            num_convs=1,
+            concat_input=False,
+            dropout_ratio=0.1,
+            num_classes=output_dim,
+            norm_cfg=dict(type="SyncBN", requires_grad=True),
+            align_corners=False,
+            loss_decode=dict(
+                type="CrossEntropyLoss", use_sigmoid=False, loss_weight=0.4
+            ),
+        )
+
+        self.seg_model = UperNet(
+            self.vit_encoder, self.neck, self.decoder, self.aux_head
+        )
 
     @staticmethod
     def resize_pos_embed(pos_embed, input_shpae, pos_shape, mode):
@@ -263,24 +319,9 @@ class Dofa(nn.Module):
         pos_embed = torch.cat((cls_token_weight, pos_embed_weight), dim=1)
         return pos_embed
 
-    def reshape(self, x):
-        # Separate channel axis
-        N, L, D = x.shape
-        x = x.permute(0, 2, 1)
-        x = x.view(N, D, int(L**0.5), int(L**0.5))
-
-        return x
-
     def forward(self, x):
-        x = self.vit_encoder.forward_features(x)  # (1, 1025, 768)
-
-        # remove cls token
-        x = x[:, 1:, :]
-        # # reshape into 2d features
-        x = self.reshape(x)
-        x = self.decoder_downsample_block(x)
-        x = self.decoder_head(x)
-        return x
+        out, out_aux = self.seg_model(x)
+        return out
 
 
 if __name__ == "__main__":

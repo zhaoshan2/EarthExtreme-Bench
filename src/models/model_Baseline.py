@@ -15,7 +15,14 @@ from transformers import (
 # transformers editable installation: https://huggingface.co/docs/transformers/installation#installing-from-source
 class BaselineNet(nn.Module):
     def __init__(
-        self, model_name, input_dim=4, output_dim=1, freezing_body=True, *args, **kwargs
+        self,
+        model_name,
+        input_dim=4,
+        output_dim=1,
+        freezing_body=True,
+        logger=None,
+        *args,
+        **kwargs,
     ):
         super(BaselineNet, self).__init__()
         # define model
@@ -41,7 +48,7 @@ class BaselineNet(nn.Module):
             for name, module in model.backbone.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
                     # Modify the conv layer to accept 6 channels
-                    print(f"copying the weights to {name}")
+                    logger.info(f"copying the weights to {name}")
                     with torch.no_grad():  # original_conv1.weight.shape)
                         # Modify the conv layer to accept 6 channels
                         integ = input_dim // 3
@@ -59,7 +66,7 @@ class BaselineNet(nn.Module):
                             )
                     module.weight.requires_grad_(True)
             if freezing_body:
-                print("frozen the backbone")
+                logger.info("frozen the backbone")
                 for _, param in model.backbone.named_parameters():
                     param.requires_grad = False
         elif model_name == "nvidia/mit-b0":
@@ -76,7 +83,7 @@ class BaselineNet(nn.Module):
 
             for name, module in model.segformer.encoder.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
-                    print(f"copying the weights to {name}")
+                    logger.info(f"copying the weights to {name}")
                     with torch.no_grad():  # original_conv1.weight.shape)
                         # Modify the conv layer to accept input_dim channels
                         integ = input_dim // 3
@@ -94,6 +101,7 @@ class BaselineNet(nn.Module):
                             )
                     module.weight.requires_grad_(True)
             if freezing_body:
+                logger.info("Frozen the encoder")
                 for _, param in model.segformer.encoder.named_parameters():
                     param.requires_grad = False
 
@@ -125,7 +133,7 @@ class BaselineNet(nn.Module):
 
             for name, module in model.encoder1.named_modules():
                 if isinstance(module, nn.Conv2d) and module.in_channels == input_dim:
-                    print(f"copying the weights to {name}")
+                    logger.info(f"copying the weights to {name}")
                     with torch.no_grad():  # original_conv1.weight.shape)
                         # Modify the conv layer to accept input_dim channels
                         integ = input_dim // 3
@@ -143,7 +151,7 @@ class BaselineNet(nn.Module):
                             )
                     module.weight.requires_grad_(True)
             if freezing_body:
-                print("Freeze the encoders")
+                logger.info("Freeze the encoders")
                 for _, param in model.encoder1.named_parameters():
                     param.requires_grad = False
                 for _, param in model.encoder2.named_parameters():

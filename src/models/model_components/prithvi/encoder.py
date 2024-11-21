@@ -57,6 +57,7 @@ class PrithviEncoder(nn.Module):
             ]
         )
         self.norm = norm_layer(embed_dim)
+        self.img_size = img_size
 
         self.initialize_weights()
 
@@ -107,3 +108,32 @@ class PrithviEncoder(nn.Module):
         # # remove cls token
         # x = x[:, 1:, :]
         return x
+
+    def forward_features(self, x):
+        hw = self.img_size // self.patch_embed.kernel_size
+        hw_shape = (hw, hw)
+        # embed patches
+        x = self.patch_embed(x)
+
+        # add pos embed w/o cls token
+        x = x + self.pos_embed[:, 1:, :]
+
+        # append cls token
+        cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        out_features = []
+        # apply Transformer blocks
+        for i, blk in enumerate(self.blocks):
+            x = blk(x)
+            if i in self.out_indices:
+                out = x[:, 1:]
+                B, _, C = out.shape
+                out = (
+                    out.reshape(B, hw_shape[0], hw_shape[1], C)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )
+                out_features.append(out)
+        return out_features

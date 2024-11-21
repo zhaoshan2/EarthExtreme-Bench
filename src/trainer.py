@@ -55,24 +55,24 @@ class EETask:
         return disaster_data
 
     def get_trainer(self):
-        # from .img_train_and_test import (
-        #     ExtremeTemperatureTrain,
-        # FireTrain,
-        #     FloodTrain,
-        # )
+        from .img_train_and_test import (
+            ExtremeTemperatureTrain,
+            FireTrain,
+            FloodTrain,
+        )
 
         # from utils.trainer.seq_train_and_test import ExpcpTrain, StormTrain
         from .pcp_train_and_test import ExpcpTrain, StormTrain
         from .tc_train_and_test import TropicalCycloneTrain
 
         trainers = {
-            # "heatwave": ExtremeTemperatureTrain,
-            # "coldwave": ExtremeTemperatureTrain,
+            "heatwave": ExtremeTemperatureTrain,
+            "coldwave": ExtremeTemperatureTrain,
             # "fire": FireTrain,
             # "flood": FloodTrain,
-            "storm": StormTrain,
+            # "storm": StormTrain,
             # "expcp": ExpcpTrain,
-            "expcp": ExpcpTrain,
+            # "expcp": ExpcpTrain,
             # "tropicalCyclone": TropicalCycloneTrain,
         }
         trainer = trainers[self.disaster](disaster=self.disaster)
@@ -107,16 +107,30 @@ class EETask:
         output_dim = config["model"].get("output_dim")
         model_name = config["model"]["name"]
 
-        if model_name in ["openmmlab/upernet-convnext-tiny", "nvidia/mit-b0", "unet"]:
-            from .models.model_Baseline import BaselineNet
-        elif model_name in ["microsoft/aurora", "microsoft/aurora_pcp"]:
-            from .models.model_Weather import BaselineNet
-        elif model_name in [
-            "xshadow/dofa",
-            "ibm-nasa-geospatial/prithvi",
-            "ibm-nasa-geospatial/prithvi_classifier",
-        ]:
-            from .models.model_RS import BaselineNet
+        # Please register new model here
+        model_import_paths = {
+            # CV models
+            "openmmlab/upernet-convnext-tiny": "Baseline",
+            "nvidia/mit-b0": "Baseline",
+            "unet": "Baseline",
+            # Weather models
+            "microsoft/aurora": "Weather",
+            "microsoft/aurora_pcp": "Weather",
+            "microsoft/climax": "Weather",
+            # RS models
+            "xshadow/dofa": "RS",
+            "xshadow/dofa_upernet": "RS",
+            "ibm-nasa-geospatial/prithvi": "RS",
+            "stanford/satmae": "RS",
+        }
+
+        if model_name in model_import_paths:
+            module_path = f"src.models.model_{model_import_paths[model_name]}"
+            from importlib import import_module
+
+            BaselineNet = getattr(import_module(module_path), "BaselineNet")
+        else:
+            raise ValueError(f"Unsupported model_name: {model_name}")
 
         model = BaselineNet(
             model_name=model_name,
@@ -124,10 +138,20 @@ class EETask:
             output_dim=output_dim,
             img_size=config["dataloader"].get("img_size"),
             num_frames=config["dataloader"].get("in_seq_length"),
+            wave_list=config.wave_list,
+            freezing_body=True if mode == "frozen_body" else False,
+            logger=logger,
         )
 
         if mode == "random":
             model._initialize_weights()
+
+        logger.info(model)
+        # Calculate the total number of parameters
+        total_params = sum(p.numel() for p in model.parameters())
+
+        # Log the total number of parameters
+        logger.info(f"Total number of parameters in the model: {total_params}")
 
         model = model.to(device)
 
@@ -149,20 +173,23 @@ class EETask:
         # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #     optimizer, "min", patience=2
         # )
-        # warmup_scheduler = LinearLR(
-        #     optimizer, start_factor=1e-8, end_factor=1.0, total_iters=10
-        # )
+        warmup_scheduler = LinearLR(
+            optimizer,
+            start_factor=config["train"]["lr"] / 3,
+            end_factor=1.0,
+            total_iters=3,
+        )
         # Main learning rate scheduler
-        # main_scheduler = CosineAnnealingLR(
-        #     optimizer, T_max=num_epochs/2, eta_min=config["train"]["lr"] / 10
-        # )
-        main_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=num_epochs)
-        # lr_scheduler = SequentialLR(
-        #     optimizer,
-        #     schedulers=[warmup_scheduler, main_scheduler],
-        #     milestones=[10],
-        # )
-        lr_scheduler = main_scheduler
+        main_scheduler = CosineAnnealingLR(
+            optimizer, T_max=num_epochs, eta_min=config["train"]["lr"] / 300
+        )
+        # main_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=num_epochs)
+        lr_scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, main_scheduler],
+            milestones=[3],
+        )
+        # lr_scheduler = main_scheduler
 
         loss = config["train"]["loss"]
         patience = config["train"]["patience"]
@@ -171,11 +198,11 @@ class EETask:
         # training
         load_dotenv(dotenv_path="config/.env")
         # reused_dic = torch.load(
-        #     "results/fully_finetune/aurora/storm/best_model_20000.pth"
+        #     "results/frozen_body/dofa/fire/last_model.pth"
         # )
         #
-        # model.load_state_dict(reused_dic)
-        # logger.info("resume training from iteration 20,000...")
+        # model.load_state_dict(reused_dic,strict=True)
+        # logger.info("resume training from epoch 8...")
 
         if stage == "train_test":
             wandb.init(

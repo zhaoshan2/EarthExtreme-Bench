@@ -18,7 +18,19 @@ from config.settings import settings
 
 
 class BaselineNet(nn.Module):
-    def __init__(self, model_name, *args, **kwargs):
+    def __init__(
+        self,
+        model_name,
+        input_dim=4,
+        output_dim=1,
+        img_size=224,
+        num_frames=1,
+        wave_list=[0.665, 0.56, 0.49],
+        freezing_body=True,
+        logger=None,
+        *args,
+        **kwargs,
+    ):
         super(BaselineNet, self).__init__()
         # define model
         self.model_name = model_name
@@ -38,7 +50,8 @@ class BaselineNet(nn.Module):
                 settings.ckp_path.aurora,
                 strict=False,
             )
-
+            for param in model.parameters():
+                param.requires_grad = True
         elif model_name == "microsoft/aurora_pcp":
             model = Aurora(
                 use_lora=False,
@@ -57,13 +70,77 @@ class BaselineNet(nn.Module):
             scales["p_0"] = 1.122875855
             locations["n"] = 0.7784
             scales["n"] = 0.4154
+            for param in model.parameters():
+                param.requires_grad = True
 
             # microsoft-aurora 1.3.0 requires timm==0.6.13, but you have timm 0.9.2 (segmentation-models-pytorch 0.3.3 requires) which is incompatible.
+        elif model_name == "microsoft/climax":
+            from .model_components.climax.climax import ClimaX_CNN
 
+            checkpoint = torch.load(settings.ckp_path.climax)["state_dict"]
+
+            model = ClimaX_CNN(
+                default_vars=[str(i) for i in range(input_dim)],
+                img_size=[img_size // 4, img_size // 4],
+                output_dim=output_dim,
+                decoder_norm="batch",
+                decoder_padding="same",
+                decoder_activation="relu",
+                decoder_depths=[2, 2, 8, 2],
+                decoder_dims=[160, 320, 640, 1280],
+            )
+            if self.training:
+                del checkpoint["net.pos_embed"]
+                # del checkpoint["net.var_embed"]
+
+            for i in range(input_dim):
+                model.net.token_embeds[i].proj = nn.Conv2d(
+                    in_channels=1,
+                    out_channels=model.net.embed_dim,
+                    kernel_size=model.net.patch_size,
+                    stride=model.net.patch_size,
+                    bias=True,
+                )
+                # Old patchembed weights and its mean
+                original_patch_embed_weights = checkpoint[
+                    f"net.token_embeds.{i}.proj.weight"
+                ]
+                mean_patch_embed_weights = original_patch_embed_weights.mean(
+                    dim=1, keepdim=True
+                )
+                # load pre-trained model weights
+                logger.info(f"copying the weights to {i}th patch embed.")
+                with torch.no_grad():  # original_conv1.weight.shape)
+                    inc = original_patch_embed_weights.shape[1]  # 4
+                    tarc = model.net.token_embeds[i].proj.weight.shape[1]  # 2
+                    integ = tarc // inc  # 0
+                    remd = tarc % inc  # 2
+                    if integ != 0:
+                        model.net.token_embeds[i].proj.weight[
+                            :, : (integ * inc), :, :
+                        ] = nn.Parameter(
+                            original_patch_embed_weights.repeat(1, integ, 1, 1)
+                        )
+                    # remaining dimensions are averaged from the original tensor
+                    if remd != 0:
+                        model.net.token_embeds[i].proj.weight[
+                            :, (integ * inc) :, :, :
+                        ] = nn.Parameter(
+                            mean_patch_embed_weights.repeat(1, remd, 1, 1) / 3.0
+                        )
+                    model.net.token_embeds[i].proj.weight.requires_grad_(True)
+                # After loading the token embed, delete them from the checkpoint
+                del checkpoint[f"net.token_embeds.{i}.proj.weight"]
+            # load pre-trained model weights
+            msg = model.load_state_dict(checkpoint, strict=False)
+            logger.info(msg)
+            if freezing_body:
+                logger.info("Freeze the encoder")
+                for _, param in model.net.named_parameters():
+                    param.requires_grad = False
         else:
             raise ValueError(f"Can't find matched model {model_name}.")
-        for param in model.parameters():
-            param.requires_grad = True
+
         self.model = model
 
     def _initialize_weights(self, std=0.02):

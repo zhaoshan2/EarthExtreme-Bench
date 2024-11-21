@@ -79,7 +79,7 @@ class IMGDataloader:
         data_loader_type: DataLoaderType,
         batch_size: int,
         shuffle: bool = False,
-        drop_last: bool = False,
+        drop_last: bool = True,
     ):
         from .dataset_components.era5_cyclone_dataset import TCDataset
         from .dataset_components.era5_extreme_temperature_dataset import (

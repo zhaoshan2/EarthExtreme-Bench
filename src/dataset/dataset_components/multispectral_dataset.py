@@ -56,7 +56,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
 
     def _transform(self, x: Dict):
         image = x["image"]  # CHW
-        label = x["label"]  # HW
+        # label = x["label"]  # HW
         new_chips = np.zeros(
             (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
         )
@@ -68,11 +68,11 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 interpolation=cv2.INTER_NEAREST,
             )
             new_chips[i, :, :] = new_slice
-        new_label = cv2.resize(
-            label, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
-        )
+        # new_label = cv2.resize(
+        #     label, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
+        # )
         x["image"] = new_chips
-        x["label"] = new_label
+        # x["label"] = new_label
         return x
 
     def __len__(self):

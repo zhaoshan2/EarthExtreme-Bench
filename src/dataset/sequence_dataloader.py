@@ -46,7 +46,6 @@ class SEQDataloader:
             self.outlier_mask = cv2.imread(
                 os.path.join(self.data_path, "taasrad_mask.png"), 0
             )
-        self.scan_max_value = settings[disaster]["normalization"]["max"]
         assert self._check_date_valid(), "Data split contains invalid date string"
 
     def _check_date_valid(self):
@@ -83,12 +82,12 @@ class SEQDataloader:
             in_seq_length=self.settings["in_seq_length"],
             out_seq_length=self.settings["out_seq_length"],
             batch_size=self.settings["batch_size"],
+            model_patch=self.settings["model_patch"],
             stride=self.settings["stride"],
             shuffle=True,
             filter_threshold=self.filter_threshold,
             return_mask=self.return_mask,
             run_size=self.settings["run_size"],
-            scan_max_value=self.scan_max_value,
         )
         return train_loader
 
@@ -115,12 +114,12 @@ class SEQDataloader:
             in_seq_length=self.settings["in_seq_length"],
             out_seq_length=self.settings["out_seq_length"],
             batch_size=self.settings["batch_size"],
+            model_patch=self.settings["model_patch"],
             stride=self.settings["stride"],
             shuffle=False,
             filter_threshold=self.filter_threshold,
             return_mask=self.return_mask,
             run_size=self.settings["run_size"],
-            scan_max_value=self.scan_max_value,
         )
         return val_loader
 
@@ -147,12 +146,12 @@ class SEQDataloader:
             in_seq_length=self.settings["in_seq_length"],
             out_seq_length=self.settings["out_seq_length"],
             batch_size=self.settings["batch_size"],
+            model_patch=self.settings["model_patch"],
             stride=self.settings["stride"],
             shuffle=False,
             filter_threshold=self.filter_threshold,
             return_mask=self.return_mask,
             run_size=self.settings["run_size"],
-            scan_max_value=self.scan_max_value,
         )
         return test_loader
 

@@ -11,13 +11,13 @@ def upload_weather_dataset():
     new_branch = "stable"
 
     # Create the branch
-    api.create_branch(
-        repo_id="zhaoshan/ee-bench_v1.0", repo_type="dataset", branch=new_branch
-    )
+    # api.create_branch(
+    #     repo_id="zhaoshan/ee-bench_v1.0", repo_type="dataset", branch=new_branch
+    # )
     for root, subdirs, files in os.walk(LOCAL_DATA_DIR):
         for file in files:
             filename = os.fsdecode(file)
-            if filename.endswith(".zip"):
+            if filename.endswith("expcp.zip"):
                 print(f"Uploading {os.path.join(root, filename)}...")
 
                 api.upload_file(
@@ -25,13 +25,14 @@ def upload_weather_dataset():
                     path_in_repo=f"data/weather/{filename}",
                     repo_id="zhaoshan/ee-bench_v1.0",
                     repo_type="dataset",
+                    revision="stable",
                 )
 
     file_paths = [
-        "data/weather/coldwave-daily.zip",
-        "data/weather/heatwave-daily.zip",
-        "data/weather/storm-minutes.zip",
-        "data/weather/tropicalCyclone-hourly.zip",
+        # "data/weather/coldwave-daily.zip",
+        # "data/weather/heatwave-daily.zip",
+        # "data/weather/storm-minutes.zip",
+        # "data/weather/tropicalCyclone-hourly.zip",
     ]
 
     # Delete each file
@@ -100,4 +101,4 @@ def upload_masks():
 
 
 if __name__ == "__main__":
-    upload_eo_dataset()
+    upload_weather_dataset()

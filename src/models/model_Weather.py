@@ -73,6 +73,30 @@ class BaselineNet(nn.Module):
             for param in model.parameters():
                 param.requires_grad = True
 
+        elif model_name == "microsoft/aurora_t2m":
+            model = Aurora(
+                use_lora=False,
+                surf_vars=("2t",),
+                static_vars=("lsm", "slt", "z"),
+                atmos_vars=("t",),
+            )
+            model.load_checkpoint_local(
+                settings.ckp_path.aurora,
+                strict=False,
+            )
+            # The mean and stds needs to be updated when using different dataset
+            locations["2t"] = 274.322479248046
+            scales["2t"] = 13.129130363464355
+            locations["t_0"] = 274.322479248046
+            scales["t_0"] = 13.129130363464355
+            locations["lsm"] = 0.3388888888888889
+            scales["lsm"] = 0.4733320292105142
+            locations["slt"] = 0.6280021960240407
+            scales["slt"] = 1.0399335522924775
+            locations["z"] = 3723.773681640625
+            scales["z"] = 8349.2705078125
+            for param in model.parameters():
+                param.requires_grad = True
             # microsoft-aurora 1.3.0 requires timm==0.6.13, but you have timm 0.9.2 (segmentation-models-pytorch 0.3.3 requires) which is incompatible.
         elif model_name == "microsoft/climax":
             from .model_components.climax.climax import ClimaX_CNN
@@ -80,7 +104,8 @@ class BaselineNet(nn.Module):
             checkpoint = torch.load(settings.ckp_path.climax)["state_dict"]
 
             model = ClimaX_CNN(
-                default_vars=[str(i) for i in range(input_dim)],
+                # default_vars=[str(i) for i in range(input_dim)],
+                default_vars=["t2m", "lsm", "slt", "z"],
                 img_size=[img_size // 4, img_size // 4],
                 output_dim=output_dim,
                 decoder_norm="batch",

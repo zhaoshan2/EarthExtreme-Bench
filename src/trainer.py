@@ -57,21 +57,25 @@ class EETask:
     def get_trainer(self):
         from .img_train_and_test import (
             ExtremeTemperatureTrain,
-            FireTrain,
-            FloodTrain,
+            # FireTrain,
+            # FloodTrain,
         )
 
-        # from utils.trainer.seq_train_and_test import ExpcpTrain, StormTrain
-        from .pcp_train_and_test import ExpcpTrain, StormTrain
-        from .tc_train_and_test import TropicalCycloneTrain
+        # from .t2m_train_and_test import (
+        #     ExtremeTemperatureTrain,
+        # )
+
+        from .seq_train_and_test import ExpcpTrain, StormTrain
+
+        # from .pcp_train_and_test import ExpcpTrain, StormTrain
+        # from .tc_train_and_test import TropicalCycloneTrain
 
         trainers = {
-            "heatwave": ExtremeTemperatureTrain,
-            "coldwave": ExtremeTemperatureTrain,
+            # "heatwave": ExtremeTemperatureTrain,
+            # "coldwave": ExtremeTemperatureTrain,
             # "fire": FireTrain,
             # "flood": FloodTrain,
-            # "storm": StormTrain,
-            # "expcp": ExpcpTrain,
+            "storm": StormTrain,
             # "expcp": ExpcpTrain,
             # "tropicalCyclone": TropicalCycloneTrain,
         }
@@ -101,6 +105,7 @@ class EETask:
             os.remove(log_path)
         logger = get_logger(log_dir=SAVE_PATH)
         logger.info(f"{config}")
+        logger.info(f"Seed: {seed}")
 
         # model
         input_dim = config["model"].get("input_dim")
@@ -116,6 +121,7 @@ class EETask:
             # Weather models
             "microsoft/aurora": "Weather",
             "microsoft/aurora_pcp": "Weather",
+            "microsoft/aurora_t2m": "Weather",
             "microsoft/climax": "Weather",
             # RS models
             "xshadow/dofa": "RS",
@@ -155,11 +161,8 @@ class EETask:
 
         model = model.to(device)
 
-        num_epochs = (
-            config["train"].get("num_epochs")
-            if not None
-            else config["train"]["num_iterations"]
-        )  # infinite sampler - use iteration instead of epoch
+        num_epochs = config["train"]["num_epochs"]
+        # infinite sampler - use iteration instead of epoch
         # num_epochs = config["train"][
         #     "num_iterations"
         # ]  # infinite sampler - use iteration instead of epoch
@@ -175,9 +178,9 @@ class EETask:
         # )
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=config["train"]["lr"] / 3,
+            start_factor=config["train"]["lr"] / 100,
             end_factor=1.0,
-            total_iters=3,
+            total_iters=3000,
         )
         # Main learning rate scheduler
         main_scheduler = CosineAnnealingLR(
@@ -187,7 +190,7 @@ class EETask:
         lr_scheduler = SequentialLR(
             optimizer,
             schedulers=[warmup_scheduler, main_scheduler],
-            milestones=[3],
+            milestones=[3000],
         )
         # lr_scheduler = main_scheduler
 

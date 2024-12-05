@@ -186,7 +186,8 @@ class BaselineNet(nn.Module):
 
             checkpoint_model = torch.load(settings.ckp_path.satmae)["model"]
             del checkpoint_model["pos_embed"]
-            channel_groups = ((0, 1, 2), (3, 4, 5), (6, 7))
+            # channel_groups = ((0, 1, 2), (3, 4, 5), (6, 7))  # flood
+            channel_groups = ((0,), (1,), (2, 3))
             model = SatMAE(
                 img_size=img_size,
                 patch_size=8,

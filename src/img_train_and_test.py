@@ -55,12 +55,12 @@ class IMGTrain:
         # Prepare for the optimizer and scheduler
         # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=- 1, verbose=False) #used in the paper
         train_loader, _ = data.train_dataloader()
-        # val_loader, _ = data.val_dataloader()
+        val_loader, _ = data.val_dataloader()
         # Loss function
         criterion = self.loss_mapping[loss]
 
         best_loss = np.inf
-        val_interval = 2
+        val_interval = 1
 
         for i in range(num_epochs):
             epoch_loss = 0.0
@@ -112,55 +112,55 @@ class IMGTrain:
             logger.info("Epoch {} : {:.3f}".format(i, epoch_loss))
 
             # Validate
-            # if i % val_interval == 0:
-            #     with torch.no_grad():
-            #         loss_val = 0
-            #         for id, val_data in enumerate(val_loader):
-            #             x = val_data["x"].to(device)
-            #             mask = val_data.get("mask")
-            #             x_val = (
-            #                 torch.cat([x, mask.to(device)], dim=1)
-            #                 if mask is not None
-            #                 else x
-            #             )
-            #             y_val = val_data["y"].to(device)
-            #
-            #             logits_val = model(x_val)
-            #
-            #             loss = criterion(logits_val, y_val)
-            #             loss_val += loss.item()
-            #
-            #         loss_val /= len(val_loader)
-            #         logger.info("Val loss {} : {:.3f}".format(i, loss_val))
-            #         wandb.log({"validation loss": loss_val})
-            #         if loss_val < best_loss:
-            #             best_loss = loss_val
-            #             best_epoch = i
-            #             best_state = {
-            #                 key: value.cpu()
-            #                 for key, value in model.state_dict().items()
-            #             }
-            #             file_path = os.path.join(ckp_path, "best_model.pth")
-            #             with open(file_path, "wb") as f:
-            #                 torch.save(best_state, f)
-            #                 logger.info(
-            #                     f"Saving the best model at epoch {best_epoch} to {file_path}...."
-            #                 )
-            #         else:
-            #             if i >= best_epoch + patience * val_interval:
-            #                 break
+            if i % val_interval == 0:
+                with torch.no_grad():
+                    loss_val = 0
+                    for id, val_data in enumerate(val_loader):
+                        x = val_data["x"].to(device)
+                        mask = val_data.get("mask")
+                        x_val = (
+                            torch.cat([x, mask.to(device)], dim=1)
+                            if mask is not None
+                            else x
+                        )
+                        y_val = val_data["y"].to(device)
+
+                        logits_val = model(x_val)
+
+                        loss = criterion(logits_val, y_val)
+                        loss_val += loss.item()
+
+                    loss_val /= len(val_loader)
+                    logger.info("Val loss {} : {:.3f}".format(i, loss_val))
+                    wandb.log({"validation loss": loss_val})
+                    if loss_val < best_loss:
+                        best_loss = loss_val
+                        best_epoch = i
+                        best_state = {
+                            key: value.cpu()
+                            for key, value in model.state_dict().items()
+                        }
+                        file_path = os.path.join(ckp_path, "best_model.pth")
+                        with open(file_path, "wb") as f:
+                            torch.save(best_state, f)
+                            logger.info(
+                                f"Saving the best model at epoch {best_epoch} to {file_path}...."
+                            )
+                    else:
+                        if i >= best_epoch + patience * val_interval:
+                            break
             last_state = {key: value.cpu() for key, value in model.state_dict().items()}
             file_path = os.path.join(ckp_path, "last_model.pth")
             with open(file_path, "wb") as f:
                 torch.save(last_state, f)
 
-        best_epoch = i
-        file_path = os.path.join(ckp_path, "best_model.pth")
-        with open(file_path, "wb") as f:
-            torch.save(last_state, f)
-            logger.info(
-                f"Saving the best model at epoch {best_epoch} to {file_path}...."
-            )
+        # best_epoch = i
+        # file_path = os.path.join(ckp_path, "best_model.pth")
+        # with open(file_path, "wb") as f:
+        #     torch.save(last_state, f)
+        #     logger.info(
+        #         f"Saving the best model at epoch {best_epoch} to {file_path}...."
+        #     )
         # return best_state, best_epoch, last_state, i
         return last_state, best_epoch, last_state, i
 
@@ -361,38 +361,38 @@ class FireTrain(IMGTrain):
                 if not os.path.exists(csv_path):
                     os.makedirs(csv_path)
 
-                # if id % 10 == 0:
-                #     mean = np.array([stats["means"][i] for i in [5, 3, 2]])
-                #     std = np.array([stats["stds"][i] for i in [5, 3, 2]])
-                #
-                #     target_test = y_test.detach().cpu().numpy()[0, 0]
-                #     # only visualize the 1st item of a batch
-                #     x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
-                #     output_test = pred_test.detach().cpu().numpy()[0]
-                #
-                #     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                #     normBackedData = x_test * std[:, None, None] + mean[:, None, None]
-                #     normBackedData = (normBackedData - np.amin(normBackedData)) / (
-                #         np.amax(normBackedData) - np.amin(normBackedData)
-                #     )
-                #     im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
-                #     plt.colorbar(im, ax=axes[0])
-                #     axes[0].set_title("input")
-                #
-                #     im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
-                #     plt.colorbar(im, ax=axes[1])
-                #     axes[1].set_title("target")
-                #
-                #     im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
-                #     plt.colorbar(im, ax=axes[2])
-                #     axes[2].set_title("pred")
-                #
-                #     png_path = save_path / model_id / "png"
-                #     if not os.path.exists(png_path):
-                #         os.makedirs(png_path)
-                #     st = test_data["meta_info"][0]
-                #     plt.savefig(f"{png_path}/test_pred_{st}.png")
-                #     plt.close()
+                if id % 10 == 0:
+                    mean = np.array([stats["means"][i] for i in [5, 3, 2]])
+                    std = np.array([stats["stds"][i] for i in [5, 3, 2]])
+
+                    target_test = y_test.detach().cpu().numpy()[0, 0]
+                    # only visualize the 1st item of a batch
+                    x_test = x_test.detach().cpu().numpy()[:, [5, 3, 2], :, :][0]
+                    output_test = pred_test.detach().cpu().numpy()[0]
+
+                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                    normBackedData = x_test * std[:, None, None] + mean[:, None, None]
+                    normBackedData = (normBackedData - np.amin(normBackedData)) / (
+                        np.amax(normBackedData) - np.amin(normBackedData)
+                    )
+                    im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
+                    plt.colorbar(im, ax=axes[0])
+                    axes[0].set_title("input")
+
+                    im = axes[1].imshow(target_test, vmin=0, vmax=1.0)
+                    plt.colorbar(im, ax=axes[1])
+                    axes[1].set_title("target")
+
+                    im = axes[2].imshow(output_test, vmin=0, vmax=1.0)
+                    plt.colorbar(im, ax=axes[2])
+                    axes[2].set_title("pred")
+
+                    png_path = save_path / model_id / "png"
+                    if not os.path.exists(png_path):
+                        os.makedirs(png_path)
+                    st = test_data["meta_info"][0]
+                    plt.savefig(f"{png_path}/test_pred_{st}.png")
+                    plt.close()
 
                 total_loss += loss
             total_loss = total_loss / id
@@ -473,8 +473,8 @@ class FloodTrain(IMGTrain):
                 pred_test = torch.nn.functional.softmax(logits_test, dim=1)
                 pred_test = torch.argmax(pred_test, dim=1).int()
 
-                total_pred.append(pred_test.flatten())
-                total_gt.append(y_test.squeeze(1).int().flatten())
+                # total_pred.append(pred_test.flatten())
+                # total_gt.append(y_test.squeeze(1).int().flatten())
                 # f1 for each sample [f1_cls0, f1_cls1, f1_cls2]
                 # f1s = test_f1(
                 #     pred_test.detach().cpu().flatten(),
@@ -488,42 +488,42 @@ class FloodTrain(IMGTrain):
                 #
                 # f1[test_data["meta_info"][0]] = f1s
                 # IoU[test_data["meta_info"][0]] = ious
+                #
+                # csv_path = save_path / model_id / "csv"
+                # if not os.path.exists(csv_path):
+                #     os.makedirs(csv_path)
 
-                csv_path = save_path / model_id / "csv"
-                if not os.path.exists(csv_path):
-                    os.makedirs(csv_path)
+                if id % 1 == 0:
+                    mean = np.array([stats["means"][i] for i in [0, 1, 2]])
+                    std = np.array([stats["stds"][i] for i in [0, 1, 2]])
 
-                # if id % 10 == 0:
-                #     mean = np.array([stats["means"][i] for i in [0, 1, 2]])
-                #     std = np.array([stats["stds"][i] for i in [0, 1, 2]])
-                #
-                #     target_test = y_test.detach().cpu().numpy()[0, 0]
-                #     # only visualize the 1st item of a batch
-                #     x_test = x_test.detach().cpu().numpy()[:, [0, 1, 2], :, :][0]
-                #     output_test = pred_test.detach().cpu().numpy()[0]
-                #     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                #     normBackedData = x_test * std[:, None, None] + mean[:, None, None]
-                #     normBackedData = (normBackedData - np.amin(normBackedData)) / (
-                #         np.amax(normBackedData) - np.amin(normBackedData)
-                #     )
-                #     im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
-                #     plt.colorbar(im, ax=axes[0])
-                #     axes[0].set_title("input")
-                #
-                #     im = axes[1].imshow(target_test, vmin=0, vmax=2.0)
-                #     plt.colorbar(im, ax=axes[1])
-                #     axes[1].set_title("target")
-                #
-                #     im = axes[2].imshow(output_test, vmin=0, vmax=2.0)
-                #     plt.colorbar(im, ax=axes[2])
-                #     axes[2].set_title("pred")
-                #
-                #     png_path = save_path / model_id / "png"
-                #     if not os.path.exists(png_path):
-                #         os.makedirs(png_path)
-                #     st = test_data["meta_info"][0]
-                #     plt.savefig(f"{png_path}/test_pred_{st}.png")
-                #     plt.close()
+                    target_test = y_test.detach().cpu().numpy()[0, 0]
+                    # only visualize the 1st item of a batch
+                    x_test = x_test.detach().cpu().numpy()[:, [0, 1, 2], :, :][0]
+                    output_test = pred_test.detach().cpu().numpy()[0]
+                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
+                    normBackedData = x_test * std[:, None, None] + mean[:, None, None]
+                    normBackedData = (normBackedData - np.amin(normBackedData)) / (
+                        np.amax(normBackedData) - np.amin(normBackedData)
+                    )
+                    im = axes[0].imshow(normBackedData.transpose((1, 2, 0)))
+                    plt.colorbar(im, ax=axes[0])
+                    axes[0].set_title("input")
+
+                    im = axes[1].imshow(target_test, vmin=0, vmax=2.0)
+                    plt.colorbar(im, ax=axes[1])
+                    axes[1].set_title("target")
+
+                    im = axes[2].imshow(output_test, vmin=0, vmax=2.0)
+                    plt.colorbar(im, ax=axes[2])
+                    axes[2].set_title("pred")
+
+                    png_path = save_path / model_id / "png"
+                    if not os.path.exists(png_path):
+                        os.makedirs(png_path)
+                    st = test_data["meta_info"][0]
+                    plt.savefig(f"{png_path}/test_pred_{st}.png")
+                    plt.close()
 
                 total_loss += loss
             total_loss = total_loss / id
@@ -531,42 +531,42 @@ class FloodTrain(IMGTrain):
             # logging_utils.save_errorScores(csv_path, f1, "f1")
             # logging_utils.save_errorScores(csv_path, IoU, "IoU")
 
-            final_pred = torch.cat(total_pred, dim=0)
-            final_gt = torch.cat(total_gt, dim=0)
-            # pixel-wise weighted average f1
-            f1_weighted = test_f1_weighted(
-                final_pred.detach().cpu(), final_gt.detach().cpu()
-            ).numpy()
-            # pixel-wise marco average f1
-            f1_macro = test_f1_macro(
-                final_pred.detach().cpu(), final_gt.detach().cpu()
-            ).numpy()
-            # pixel-wise f1
-            f1_unweighted = test_f1(
-                final_pred.detach().cpu(),
-                final_gt.detach().cpu(),
-            ).numpy()
-
-            # pixel-wise IoU
-            iou_unweighted = test_IoU(
-                final_pred.detach().cpu(), final_gt.detach().cpu()
-            ).numpy()
-            # pixel-wise weighted average IoU
-            iou_weighted = test_IoU_weighted(
-                final_pred.detach().cpu(), final_gt.detach().cpu()
-            ).numpy()
-            # pixel-wise macro average IoU
-            iou_macro = test_IoU_macro(
-                final_pred.detach().cpu(), final_gt.detach().cpu()
-            ).numpy()
+            # final_pred = torch.cat(total_pred, dim=0)
+            # final_gt = torch.cat(total_gt, dim=0)
+            # # pixel-wise weighted average f1
+            # f1_weighted = test_f1_weighted(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # ).numpy()
+            # # pixel-wise marco average f1
+            # f1_macro = test_f1_macro(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # ).numpy()
+            # # pixel-wise f1
+            # f1_unweighted = test_f1(
+            #     final_pred.detach().cpu(),
+            #     final_gt.detach().cpu(),
+            # ).numpy()
+            #
+            # # pixel-wise IoU
+            # iou_unweighted = test_IoU(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # ).numpy()
+            # # pixel-wise weighted average IoU
+            # iou_weighted = test_IoU_weighted(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # ).numpy()
+            # # pixel-wise macro average IoU
+            # iou_macro = test_IoU_macro(
+            #     final_pred.detach().cpu(), final_gt.detach().cpu()
+            # ).numpy()
         return {
             "total_loss": total_loss,
-            "f1": f1_unweighted,
-            "mF1_weighted": f1_weighted,
-            "mF1_macro": f1_macro,
-            "IoU": iou_unweighted,
-            "mIoU_weighted": iou_weighted,
-            "mIoU_macro": iou_macro,
+            # "f1": f1_unweighted,
+            # "mF1_weighted": f1_weighted,
+            # "mF1_macro": f1_macro,
+            # "IoU": iou_unweighted,
+            # "mIoU_weighted": iou_weighted,
+            # "mIoU_macro": iou_macro,
         }
 
 

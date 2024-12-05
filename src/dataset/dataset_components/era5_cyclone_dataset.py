@@ -71,8 +71,13 @@ def resize_and_crop(img, dst_w, dst_h, lon=None, lat=None):
     )
     # resized_img = img
     # Randomly crop a 224x224 region from the resized image
-    x = random.randint(0, new_width - dst_w)
-    y = random.randint(0, new_height - dst_h)
+    # Randomly crop a 224x224 region from the resized image
+    # x = random.randint(0, new_width - dst_h)
+    # y = random.randint(0, new_height - dst_w)
+    # Central crop a 224x224 region from the resized image
+    x = (new_width - dst_w) // 2
+    y = (new_height - dst_h) // 2
+
     cropped_img = resized_img[y : y + dst_h, x : x + dst_w, ...]
     if lon is not None:
         scaling_factor = width / new_width

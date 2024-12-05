@@ -28,7 +28,6 @@ class HDFIterator:
         ascending: bool = True,
         return_mask: bool = True,
         run_size: int = 25,
-        scan_max_value: float = 52.5,
         return_type=np.float32,
     ):
         self.data = data
@@ -49,7 +48,7 @@ class HDFIterator:
         self.out_seq_length = out_seq_length
         self.return_type = return_type
         self.current_run = self._set_current_run()
-        self.scan_max_value = scan_max_value
+        self.scan_max_value = settings[disaster]["normalization"]["max"]
         self.outlier_mask = mask
         self.MetaInfo = {
             "disaster": self.disaster,
@@ -91,6 +90,10 @@ class HDFIterator:
                     a_max=self.scan_max_value,
                     # 1,
                 )
+                # normalize the data
+                frames = (
+                    frames - settings[self.disaster]["normalization"]["pcp_mean"]
+                ) / settings[self.disaster]["normalization"]["pcp_std"]
                 seqs.append(frames)
                 datetime_seqs.append(
                     run_datetime
@@ -132,6 +135,7 @@ class HDFIterator:
         new_h, new_w = (retval.shape[-2] // self.model_patch) * self.model_patch, (
             retval.shape[-1] // self.model_patch
         ) * self.model_patch
+
         if not self.return_mask:
             # return retval, datetime_seqs
 

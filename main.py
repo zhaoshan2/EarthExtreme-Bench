@@ -1,6 +1,6 @@
 import argparse
 import os
-
+import warnings
 import torch
 
 from src.trainer import EETask
@@ -8,8 +8,8 @@ from src.trainer import EETask
 # Press the green button in the gutter to run the script.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disaster", type=str, default="fire")
-    parser.add_argument("--seed", type=int, default=2546)
+    parser.add_argument("--disaster", type=str, default="storm")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--mode",
         type=str,
@@ -26,17 +26,22 @@ if __name__ == "__main__":
     # Get the current process
     p = psutil.Process(os.getpid())
     # Set the CPU affinity (limit to specific CPUs, e.g., CPUs 0 and 1)
-    p.cpu_affinity([32, 33, 34, 35])
+    # p.cpu_affinity([15, 16, 17, 18])
     torch.cuda.empty_cache()
+
+    warnings.filterwarnings(
+        "ignore",
+        message="torch.utils.checkpoint: please pass in use_reentrant=True or use_reentrant=False explicitly.*",
+    )
 
     ee_task = EETask(disaster=args.disaster)
     ee_task.train_and_evaluate(
         seed=args.seed,
         mode=args.mode,
         stage=args.stage,
-        model_path=None,
-        # model_path=f"/home/EarthExtreme-Bench/results/{args.mode}/mit-b0/{args.disaster}/best_model_80000_2024-10-28-01-54",
+        model_path=f"/home/EarthExtreme-Bench/results/{args.mode}/aurora_t2m/{args.disaster}/best_model_0_2024-11-28-14-31",
     )
+
     # mit-b0/best_model_78_2024-09-06-16-54
     # dataloader = ee_task.get_loader()
     # train_loader = dataloader.test_dataloader()

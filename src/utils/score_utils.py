@@ -435,10 +435,7 @@ def _get_hit_miss_counts_numba(prediction, truth, mask, thresholds):
 class RadarEvaluation(object):
     def __init__(self, seq_len, no_ssim=True, thresholds=None):
         print("thresholds: ", thresholds)
-        if thresholds is None:
-            self._thresholds = [0.5, 2.0, 5.0, 10.0, 30.0]
-        else:
-            self._thresholds = [i for i in thresholds]
+        self._thresholds = [i for i in thresholds]
         self._seq_len = seq_len
         self._no_ssim = no_ssim
         # self._exclude_mask = get_exclude_mask()

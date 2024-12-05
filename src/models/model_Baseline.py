@@ -154,12 +154,12 @@ class BaselineNet(nn.Module):
                 logger.info("Freeze the encoders")
                 for _, param in model.encoder1.named_parameters():
                     param.requires_grad = False
-                for _, param in model.encoder2.named_parameters():
-                    param.requires_grad = False
-                for _, param in model.encoder3.named_parameters():
-                    param.requires_grad = False
-                for _, param in model.encoder4.named_parameters():
-                    param.requires_grad = False
+                # for _, param in model.encoder2.named_parameters():
+                #     param.requires_grad = False
+                # for _, param in model.encoder3.named_parameters():
+                #     param.requires_grad = False
+                # for _, param in model.encoder4.named_parameters():
+                #     param.requires_grad = False
 
         else:
             raise ValueError(f"Can't find matched model {model_name}.")

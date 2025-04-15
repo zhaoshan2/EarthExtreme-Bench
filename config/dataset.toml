@@ -4,7 +4,7 @@ means=[0.485, 0.456, 0.406]
 stds=[0.229, 0.224, 0.225]
 
 [fire]
-data_path = "/home/EarthExtreme-Bench/data/eo"
+data_path = "/home/data_storage_home/data/ee_bench_v1_small/data/eo/"
 image_file_suffix = "_merged.tif"
 label_file_suffix = ".mask.tif"
 prefix = -11
@@ -12,7 +12,7 @@ wave_list = [0.48, 0.56, 0.65, 0.865, 1.61, 2.2]
 [fire.dataloader]
 in_seq_length = 1
 img_size = 224
-val_ratio = 1e-5
+val_ratio = 0.1
 batch_size = 2
 [fire.normalization]
 means=[0.033349706741586264,
@@ -32,24 +32,24 @@ stds=[0.02269135568823774,
 [fire.model]
 input_dim = 6
 output_dim = 2
-name = "xshadow/dofa_upernet" #stanford/satmae"#'ibm-nasa-geospatial/prithvi'#'openmmlab/upernet-convnext-tiny'
+name = "ibm-nasa-geospatial/prithvi-2_upernet" #stanford/satmae"#'ibm-nasa-geospatial/prithvi'#'openmmlab/upernet-convnext-tiny'
 [fire.train]
-lr = 5e-3
+lr = 5e-5
 weight_decay = 5e-6
-num_epochs = 20
+num_epochs = 50
 loss = 'dice'
-patience = 20
+patience = 10
 
 [flood]
-data_path = "/home/EarthExtreme-Bench/data/eo"
+data_path = "/home/data_storage_home/data/ee_bench_v1_small/data/eo"
 image_file_suffix = "_SAR.tif"
 label_file_suffix = "_GT.tif"
 prefix = -8
 wave_list = [3.75, 3.75, 3.75, 3.75, 3.75, 3.75, 3.75, 3.75]
 [flood.dataloader]
 in_seq_length = 1
-img_size = 512
-val_ratio = 1e-5
+img_size = 224
+val_ratio = 0.15
 batch_size = 2
 [flood.normalization]
 means=[0.23651549,
@@ -73,13 +73,13 @@ stds=[0.16280619,
 [flood.model]
 input_dim = 8
 output_dim = 3
-name = "xshadow/dofa_upernet"# 'openmmlab/upernet-convnext-tiny' "ibm-nasa-geospatial/prithvi"
+#name = "unet" #microsoft/climax"#xshadow/dofa_upernet"#"ibm-nasa-geospatial/prithvi-2_upernet"# 'openmmlab/upernet-convnext-tiny' "ibm-nasa-geospatial/prithvi"
 [flood.train]
-lr = 5e-3
+lr = 1e-3
 weight_decay = 5e-6
 num_epochs = 30
 loss = 'dice'
-patience = 20
+patience = 30
 
 [tropicalCyclone]
 data_path = "/home/EarthExtreme-Bench/data/weather"
@@ -138,16 +138,19 @@ upper_weights = [[2.8, 2.8, 2.8, 2.8, 2.8], [0.87, 0.87, 0.87, 0.87, 0.87], [0.6
 
 [coldwave]
 data_path = "/home/EarthExtreme-Bench/data/weather"
-temporal_res = "daily"
+temporal_res = 24
+wave_list = [0,1,2,3]
 [coldwave.variables]
 surface = 't2m'
 mask = ['lsm', 'slt', 'z']
 [coldwave.dataloader]
-horizon = 7
+horizon = 5
 in_seq_length = 1
-img_size = 128
-val_ratio = 0.5
+val_ratio = 0.1
+img_size = 96
 batch_size = 2
+model_patch = 4 # input is multiple times of model_patch when using aurora
+transforms = 1
 [coldwave.normalization]
 mean = 274.322479248046
 std = 13.129130363464355
@@ -162,13 +165,13 @@ mask_stds = [0.4733320292105142,
 [coldwave.model]
 input_dim = 4
 output_dim = 1
-name = "unet"
+name = "microsoft/aurora_t2m"
 [coldwave.train]
-lr = 1e-8
-weight_decay = 1e-3
-num_epochs = 200
+lr = 5e-7
+weight_decay = 5e-6
+num_epochs = 20
 loss='l1'
-patience = 20
+patience = 50
 
 [heatwave]
 data_path = "/home/EarthExtreme-Bench/data/weather"
@@ -182,7 +185,8 @@ horizon = 10
 in_seq_length = 1
 img_size = 224
 val_ratio = 0.01
-batch_size = 16
+batch_size = 4
+transforms = 1
 [heatwave.normalization]
 mean = 295.2374267578125
 std = 9.275670051574707
@@ -197,7 +201,7 @@ mask_stds = [0.4733320292105142,
 [heatwave.model]
 input_dim = 4
 output_dim = 1
-name = "ibm-nasa-geospatial/prithvi"
+name = "ibm-nasa-geospatial/prithvi" #"microsoft/aurora_t2m" #  #"ibm-nasa-geospatial/prithvi"
 [heatwave.train]
 lr = 5e-3
 weight_decay = 5e-6
@@ -208,7 +212,8 @@ patience = 20
 [storm]
 data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = 5 #minutes
-spatial_res = 0.005
+spatial_res = 0.005 #0.025(resampled to 96x96)
+wave_list = [0,0,0]
 [storm.variables]
 surface = ['pcp']
 upper = ['p']
@@ -223,22 +228,23 @@ noise_std = 0.4154
 img_size = 480
 in_seq_length = 2
 out_seq_length = 1
-batch_size = 1
+batch_size = 16
 stride = 5
+model_patch = 4
 run_size = 25
-train_date = ["2017-01-01", "2018-06-30"] # 2010-01-01 to 2017-12-31
+train_date = ["2017-01-01", "2018-06-30"] #about 33023 # 2010-01-01 to 2017-12-31
 val_date = ["2018-06-30", "2018-12-31"] # 2018-01-01 to 2018-12-31
 test_date = ["2019-01-01", "2019-12-31"] # 2019-01-01 to 2019-12-31
 [storm.evaluation]
 thresholds = [0.5, 2, 5, 10, 30]
 [storm.model]
-name = "microsoft/aurora_pcp"
-input_dim = 3
+name = "microsoft/aurora_pcp"#"ibm-nasa-geospatial/prithvi"
+input_dim = 1
 output_dim = 1
 [storm.train]
-lr = 5e-5
+lr = 1e-5
 weight_decay = 5e-6
-num_iterations = 100000
+num_epochs = 20000 #please keep num_epochs * batch_size the same 640,000
 loss='l1'
 patience = 10
 
@@ -246,6 +252,7 @@ patience = 10
 data_path = "/home/EarthExtreme-Bench/data/weather"
 temporal_res = 30 #minutes
 spatial_res = 0.1
+wave_list = [0,0,0]
 [expcp.variables]
 surface = ['pcp']
 upper = ['p']
@@ -254,26 +261,28 @@ mask = ['n']
 max = 104.56
 pcp_mean =  1.5899234
 pcp_std = 3.5019548
+noise_mean = 1
+noise_std = 1
 [expcp.dataloader]
-img_size = 50
-in_seq_length = 2
+img_size = 48 #50
+in_seq_length = 3
 out_seq_length = 1
-batch_size = 1
-stride = 1
+batch_size = 16
+stride = 5
 model_patch = 4
-run_size = 6
+run_size = 4
 train_date = ["2021-01-01", "2022-06-30"] # 2020-01-01 to 2022-06-30
 val_date = ["2022-07-01", "2022-12-31"] # 2022-07-01 to 2022-12-31
 test_date = ["2023-01-01", "2023-12-31"] # 2023-01-01 to 2023-12-31
 [expcp.model]
-name = "microsoft/aurora_pcp"
-input_dim = 3
+name = "ibm-nasa-geospatial/prithvi" #"microsoft/aurora_pcp"
+input_dim = 1
 output_dim = 1
 [expcp.evaluation]
 thresholds = [0.5, 2, 5, 10, 30]
 [expcp.train]
-lr = 5e-6
+lr = 1e-5
 weight_decay = 5e-6
-num_iterations = 500000
+num_epochs = 20000
 loss = 'l1'
 patience = 10

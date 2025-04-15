@@ -33,10 +33,12 @@ def set_seed(seed):
 
 
 class EETask:
-    def __init__(self, disaster):
+    def __init__(self, disaster, model_name):
         self.disaster = disaster
+        self.model_name = model_name
         self.disaster_data = self.get_loader()
         self.trainer = self.get_trainer()
+
 
     def get_loader(self):
         from .dataset.image_dataloader import IMGDataloader
@@ -55,23 +57,25 @@ class EETask:
         return disaster_data
 
     def get_trainer(self):
+        if "aurora" in self.model_name:
+            from .pcp_train_and_test import ExpcpTrain, StormTrain
+            from .tc_train_and_test import TropicalCycloneTrain
+            from .t2m_train_and_test import (
+                ExtremeTemperatureTrain,
+            )
+        else:
+            from .img_train_and_test import ExtremeTemperatureTrain
+            from .seq_train_and_test import ExpcpTrain, StormTrain
         from .img_train_and_test import (
-            ExtremeTemperatureTrain,
-            FireTrain,
-            FloodTrain,
-        )
-
-        # from utils.trainer.seq_train_and_test import ExpcpTrain, StormTrain
-        from .pcp_train_and_test import ExpcpTrain, StormTrain
-        from .tc_train_and_test import TropicalCycloneTrain
-
+                FireTrain,
+                FloodTrain,
+            )
         trainers = {
             "heatwave": ExtremeTemperatureTrain,
             "coldwave": ExtremeTemperatureTrain,
-            # "fire": FireTrain,
-            # "flood": FloodTrain,
+            "fire": FireTrain,
+            "flood": FloodTrain,
             # "storm": StormTrain,
-            # "expcp": ExpcpTrain,
             # "expcp": ExpcpTrain,
             # "tropicalCyclone": TropicalCycloneTrain,
         }
@@ -81,7 +85,7 @@ class EETask:
     def train_and_evaluate(self, seed, mode, stage="train_test", model_path=None):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         CURR_FOLDER_PATH = Path(__file__).parent.parent  # "/home/EarthExtreme-Bench"
-        torch.set_num_threads(4)
+        torch.set_num_threads(8)
         set_seed(seed)
         config = settings[self.disaster]
         # checkpoint = torch.load('/home/data_storage_home/data/disaster/pretrained_model/Prithvi_100M.pt')
@@ -89,7 +93,7 @@ class EETask:
             CURR_FOLDER_PATH
             / "results"
             / mode
-            / config["model"]["name"].split("/")[-1]
+            / self.model_name.split("/")[-1]
             / self.disaster
         )
         if not os.path.exists(SAVE_PATH):
@@ -101,11 +105,13 @@ class EETask:
             os.remove(log_path)
         logger = get_logger(log_dir=SAVE_PATH)
         logger.info(f"{config}")
+        logger.info(f"Seed: {seed}")
 
         # model
         input_dim = config["model"].get("input_dim")
         output_dim = config["model"].get("output_dim")
-        model_name = config["model"]["name"]
+        # model_name = config["model"]["name"]
+        model_name = self.model_name
 
         # Please register new model here
         model_import_paths = {
@@ -116,11 +122,13 @@ class EETask:
             # Weather models
             "microsoft/aurora": "Weather",
             "microsoft/aurora_pcp": "Weather",
+            "microsoft/aurora_t2m": "Weather",
             "microsoft/climax": "Weather",
             # RS models
             "xshadow/dofa": "RS",
             "xshadow/dofa_upernet": "RS",
             "ibm-nasa-geospatial/prithvi": "RS",
+            "ibm-nasa-geospatial/prithvi-2_upernet": "RS",
             "stanford/satmae": "RS",
         }
 
@@ -133,6 +141,7 @@ class EETask:
             raise ValueError(f"Unsupported model_name: {model_name}")
 
         model = BaselineNet(
+            disaster=self.disaster,
             model_name=model_name,
             input_dim=input_dim,
             output_dim=output_dim,
@@ -145,6 +154,9 @@ class EETask:
 
         if mode == "random":
             model._initialize_weights()
+            for _, param in model.named_parameters():
+                param.requires_grad = True
+            logger.info("random initialized model....")
 
         logger.info(model)
         # Calculate the total number of parameters
@@ -155,16 +167,18 @@ class EETask:
 
         model = model.to(device)
 
-        num_epochs = (
-            config["train"].get("num_epochs")
-            if not None
-            else config["train"]["num_iterations"]
-        )  # infinite sampler - use iteration instead of epoch
+        num_epochs = config["train"]["num_epochs"]
+        # infinite sampler - use iteration instead of epoch
         # num_epochs = config["train"][
         #     "num_iterations"
         # ]  # infinite sampler - use iteration instead of epoch
 
         # optimizer
+        # optimizer = torch.optim.SGD(
+        #     model.parameters(),
+        #     lr=config["train"]["lr"],
+        #     weight_decay=config["train"]["weight_decay"],
+        # )
         optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=config["train"]["lr"],
@@ -173,21 +187,22 @@ class EETask:
         # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #     optimizer, "min", patience=2
         # )
+        warm_up_iter = 3
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=config["train"]["lr"] / 3,
+            start_factor=config["train"]["lr"] / 100,
             end_factor=1.0,
-            total_iters=3,
+            total_iters=warm_up_iter,
         )
         # Main learning rate scheduler
         main_scheduler = CosineAnnealingLR(
-            optimizer, T_max=num_epochs, eta_min=config["train"]["lr"] / 300
+            optimizer, T_max=num_epochs, eta_min=config["train"]["lr"] / 100
         )
         # main_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=num_epochs)
         lr_scheduler = SequentialLR(
             optimizer,
             schedulers=[warmup_scheduler, main_scheduler],
-            milestones=[3],
+            milestones=[warm_up_iter],
         )
         # lr_scheduler = main_scheduler
 
@@ -249,6 +264,7 @@ class EETask:
             model_id = str(backup_model_path).split("/")[-1]
         best_model_state_dict = torch.load(backup_model_path / f"{model_id}.pth")
         logger.info(f"Begin testing {backup_model_path}...")
+
         msg = model.load_state_dict(best_model_state_dict)
         logger.info(msg)
 

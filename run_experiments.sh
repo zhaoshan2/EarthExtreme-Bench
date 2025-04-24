@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Define your list of model names
-#models=("unet" "microsoft/climax" "ibm-nasa-geospatial/prithvi" "stanford/satmae")  # Replace with your actual model names
-models=("nvidia/mit-b0" "xshadow/dofa_upernet" "ibm-nasa-geospatial/prithvi-2_upernet" "openmmlab/upernet-convnext-tiny")
+models=("unet" "microsoft/climax" "ibm-nasa-geospatial/prithvi" "stanford/satmae")  # Replace with your actual model names
+# models=("nvidia/mit-b0" "xshadow/dofa_upernet" "ibm-nasa-geospatial/prithvi-2_upernet" "openmmlab/upernet-convnext-tiny")
 
 # Define the GPUs to be used (assuming you have at least 3 GPUs available)
 gpus=(0 1 2 3)  # Adjust according to the number of GPUs you have

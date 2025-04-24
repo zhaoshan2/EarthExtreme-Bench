@@ -220,7 +220,8 @@ class UperNet(torch.nn.Module):
 
     def forward(self, x):
         feat = self.backbone.forward_features(x)
-
+        # for i, f in enumerate(feat):
+        #     print(i, f.shape) # 0, [2, 768, 32, 32]; 1, [2, 768, 32, 32]...
         feat = self.neck(feat)
         out = self.decode_head(feat)
         out = resize(out, size=x.shape[2:], mode="bilinear", align_corners=False)
@@ -330,7 +331,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = Dofa(wave_list=[0.665, 0.56, 0.49]).to(device)
     # The model accepts remote sensing data in a video format (B, C, H, W)
-    x = torch.randn(1, 3, 512, 512)
+    x = torch.randn(2, 3, 512, 512)
     x = x.to(device)
     y = model.forward(x)
     print("output", y.shape)  # (1,1,512,512)

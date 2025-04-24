@@ -24,6 +24,27 @@ sys.path.insert(0, "/home/EarthExtreme-Bench")
 from config.settings import settings
 
 
+def crop_from_upper_left(img, base):
+    """
+    Parameters:
+        img: torch.Tensor
+        base: the multiple of base of cropped image
+    Return:
+        cropped_img: the spatial size is multiple of base
+    """
+    # Get original height and width
+    height, width = img.shape[-2:]
+
+    # Calculate the new height and width, closest multiples of 4
+    new_height = (height // base) * base
+    new_width = (width // base) * base
+
+    # Crop from the upper-left corner
+    cropped_img = img[..., :new_height, :new_width]
+
+    return cropped_img
+
+
 def resize_and_crop(img, dst_w, dst_h, lon=None, lat=None):
     # Get the dimensions of the image
     height, width = img.shape[:2]
@@ -48,9 +69,11 @@ def resize_and_crop(img, dst_w, dst_h, lon=None, lat=None):
     scaling_factor = width / new_width
 
     # Randomly crop a 224x224 region from the resized image
-    x = random.randint(0, new_width - dst_h)
-    y = random.randint(0, new_height - dst_w)
-
+    # x = random.randint(0, new_width - dst_h)
+    # y = random.randint(0, new_height - dst_w)
+    # Central crop a 224x224 region from the resized image
+    x = (new_width - dst_w) // 2
+    y = (new_height - dst_h) // 2
     cropped_img = resized_img[y : y + dst_h, x : x + dst_w, ...]
 
     if lon is not None:
@@ -59,9 +82,12 @@ def resize_and_crop(img, dst_w, dst_h, lon=None, lat=None):
         delta_lat = y * 0.25 * scaling_factor
 
         # The new upper-left corner coordinates in degrees
+        if lon < 0:
+            lon = 360 + lon
         new_lon = lon + delta_lon
         new_lat = lat - delta_lat  # latitude decreases as you move down
         # cropped image, (new lon, new lat, new spatial resolution)
+
         return cropped_img, (new_lon, new_lat, 0.25 * scaling_factor)
     else:
         return cropped_img
@@ -111,18 +137,18 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
         debug: bool = False,
     ):
         self.disaster = disaster
-        self.settings = settings[disaster]
-        self.horizon = self.settings["dataloader"]["horizon"]
-        self.transforms = None
-        self.chip_size = self.settings["dataloader"]["img_size"]
-        self.variable = self.settings["variables"]["surface"]
+        self.config = settings[self.disaster]
+        self.horizon = self.config["dataloader"]["horizon"]
+        self.transforms = self.config["dataloader"]["transforms"]
+        self.chip_size = self.config["dataloader"]["img_size"]
+        self.variable = self.config["variables"]["surface"]
         self.records = Record(
             disaster=disaster,
             data_path=settings[disaster]["data_path"],
             size=self.chip_size,
             split=split,
-            val_ratio=self.settings["dataloader"]["val_ratio"],
-            mean_std_dict=self.settings["normalization"],
+            val_ratio=self.config["dataloader"]["val_ratio"],
+            mean_std_dict=self.config["normalization"],
             debug=debug,
         )
         self.chip_metadic = self._init_meta_info(self.records, self.horizon)
@@ -148,46 +174,58 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
                         ).strftime("%Y-%m-%d"),
                         "latitude": new_space_info[1],
                         "longitude": new_space_info[0],
-                        "resolution": new_space_info[2],
+                        "spatial_res": new_space_info[2],
                     }
                 )
 
         return meta_info
 
     def resize_sequence(self, file_path, disno, max_w, max_h):
-        land_masks = np.load(file_path / disno / f"land_{disno}.npy")
-        soil_type_masks = np.load(file_path / disno / f"soil_type_{disno}.npy")
-        topography_masks = np.load(file_path / disno / f"topography_{disno}.npy")
-
-        mask = np.concatenate(
-            (
-                land_masks[np.newaxis, ...],
-                soil_type_masks[np.newaxis, ...],
-                topography_masks[np.newaxis, ...],
-            ),
-            axis=0,
-        )
-
-        mask = np.transpose(mask, (1, 2, 0))
-
-        mask = resize_and_crop(mask, max_w, max_h)
-        mask = np.transpose(mask, (2, 0, 1))
-
-        assert mask.shape == (3, self.chip_size, self.chip_size)
-
         current_data = xr.open_dataset(file_path / disno / f"{disno}.nc")
         t2m = current_data[self.variable].values.astype(np.float32)
         start_lon = current_data.longitude.values.astype(np.float32)[0]
         start_lat = current_data.latitude.values.astype(np.float32)[0]
 
-        new_chips = np.zeros(
-            (t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32
-        )
-        for slice in range(t2m.shape[0]):
-            new_t2m_slice, new_space_info = resize_and_crop(
-                t2m[slice], max_w, max_h, start_lon, start_lat
+        if self.transforms == 0:
+            new_chips = crop_from_upper_left(
+                t2m, self.config["dataloader"]["model_patch"]
             )
-            new_chips[slice] = new_t2m_slice
+            new_space_info = (start_lon, start_lat, 0.25)
+
+        elif self.transforms == 1:
+            new_chips = np.zeros(
+                (t2m.shape[0], self.chip_size, self.chip_size), dtype=np.float32
+            )
+            for slice in range(t2m.shape[0]):
+                new_t2m_slice, new_space_info = resize_and_crop(
+                    t2m[slice], max_w, max_h, start_lon, start_lat
+                )
+                new_chips[slice] = new_t2m_slice
+
+        # mask
+        mask_types = ["land", "soil_type", "topography"]
+        # Load and resize the masks
+        masks = []
+        for mask_type in mask_types:
+            mask = np.load(file_path / disno / f"{mask_type}_{disno}.npy")
+            mask_resized = cv2.resize(
+                mask,
+                (t2m.shape[-1], t2m.shape[-2]),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            masks.append(mask_resized[np.newaxis, ...])
+        # Concatenate masks along a new axis
+        mask = np.concatenate(masks, axis=0)
+
+        if self.transforms == 0:
+            mask = crop_from_upper_left(mask, self.config["dataloader"]["model_patch"])
+        elif self.transforms == 1:
+            mask = np.transpose(mask, (1, 2, 0))
+
+            mask = resize_and_crop(mask, max_w, max_h)
+            mask = np.transpose(mask, (2, 0, 1))
+
+            assert mask.shape == (3, self.chip_size, self.chip_size)
 
         return new_chips, current_data, mask, new_space_info
 
@@ -239,6 +277,12 @@ class BaseWaveDataset(data.Dataset, metaclass=ABCMeta):
             "y": torch.tensor(label_normalized).unsqueeze(0),
             # mask (3, 128, 128)
             "mask": torch.tensor(mask_normalized),
+            # "x" (1, 128,128)
+            "x_u": torch.tensor(img).unsqueeze(0),
+            # "y" (1, 128, 128)
+            "y_u": torch.tensor(label).unsqueeze(0),
+            # mask (3, 128, 128)
+            "mask_u": torch.tensor(mask),
             "disno": disno,
             "meta_info": self.chip_metadic[key],
         }

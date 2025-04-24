@@ -195,10 +195,10 @@ class EETask:
             total_iters=warm_up_iter,
         )
         # Main learning rate scheduler
-        main_scheduler = CosineAnnealingLR(
-            optimizer, T_max=num_epochs, eta_min=config["train"]["lr"] / 100
-        )
-        # main_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=num_epochs)
+        # main_scheduler = CosineAnnealingLR(
+        #     optimizer, T_max=num_epochs, eta_min=config["train"]["lr"] / 100
+        # )
+        main_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=num_epochs)
         lr_scheduler = SequentialLR(
             optimizer,
             schedulers=[warmup_scheduler, main_scheduler],

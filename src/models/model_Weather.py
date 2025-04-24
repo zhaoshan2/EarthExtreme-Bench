@@ -5,14 +5,14 @@ import torch.nn as nn
 
 sys.path.insert(0, "/home/EarthExtreme-Bench")
 sys.path.insert(0, "/home/EarthExtreme-Bench/src/models/model_components")
-from aurora import (
-    Aurora,
-    AuroraHighRes,
-    AuroraSmall,
-    Batch,
-    Metadata,
-)
-from aurora.normalisation import locations, scales
+# from aurora import (
+#     Aurora,
+#     AuroraHighRes,
+#     AuroraSmall,
+#     Batch,
+#     Metadata,
+# )
+# from aurora.normalisation import locations, scales
 
 from config.settings import settings
 
@@ -20,6 +20,7 @@ from config.settings import settings
 class BaselineNet(nn.Module):
     def __init__(
         self,
+        disaster,
         model_name,
         input_dim=4,
         output_dim=1,
@@ -33,7 +34,9 @@ class BaselineNet(nn.Module):
     ):
         super(BaselineNet, self).__init__()
         # define model
+        self.disaster = disaster
         self.model_name = model_name
+
         if model_name == "microsoft/aurora_small":
             model = AuroraSmall()
             model.load_checkpoint(
@@ -64,15 +67,46 @@ class BaselineNet(nn.Module):
                 strict=False,
             )
             # The mean and stds needs to be updated when using different dataset
-            locations["pcp"] = 1.824645369
-            scales["pcp"] = 1.122875855
-            locations["p_0"] = 1.824645369
-            scales["p_0"] = 1.122875855
-            locations["n"] = 0.7784
-            scales["n"] = 0.4154
+            locations["pcp"] = settings[self.disaster]['normalization']['pcp_mean']#1.824645369
+            scales["pcp"] = settings[self.disaster]['normalization']['pcp_std'] #4.5466495
+            locations["p_0"] = settings[self.disaster]['normalization']['pcp_mean']#1.824645369
+            scales["p_0"] = settings[self.disaster]['normalization']['pcp_std']
+            locations["n"] = settings[self.disaster]['normalization']['noise_mean']
+            scales["n"] = settings[self.disaster]['normalization']['noise_std']
+            ## Statistics used for 30-min aurora model
+            # locations["pcp"] = 1.159494744
+            # scales["pcp"] = 0.900219525
+            # locations["p_0"] = 1.159494744
+            # scales["p_0"] = 0.900219525
+            # locations["n"] = 1.0
+            # scales["n"] = 1.0
+            # for param in model.parameters():
+            #     param.requires_grad = True
+
+        elif model_name == "microsoft/aurora_t2m":
+            model = Aurora(
+                use_lora=False,
+                surf_vars=("2t",),
+                static_vars=("lsm", "slt", "z"),
+                atmos_vars=("t",),
+            )
+            model.load_checkpoint_local(
+                settings.ckp_path.aurora,
+                strict=False,
+            )
+            # The mean and stds needs to be updated when using different dataset
+            locations["2t"] = settings[self.disaster]['normalization']['mean'] #274.322479248046
+            scales["2t"] = settings[self.disaster]['normalization']['std'] #13.129130363464355
+            locations["t_0"] = settings[self.disaster]['normalization']['mean'] #
+            scales["t_0"] = settings[self.disaster]['normalization']['std'] #
+            locations["lsm"] = settings[self.disaster]['normalization']['mask_means'][0]#0.3388888888888889
+            scales["lsm"] = settings[self.disaster]['normalization']['mask_stds'][0]# 0.4733320292105142
+            locations["slt"] = settings[self.disaster]['normalization']['mask_means'][1]#0.6280021960240407
+            scales["slt"] = settings[self.disaster]['normalization']['mask_stds'][1]#1.0399335522924775
+            locations["z"] = settings[self.disaster]['normalization']['mask_means'][2]#3723.773681640625
+            scales["z"] = settings[self.disaster]['normalization']['mask_stds'][2]# 8349.2705078125
             for param in model.parameters():
                 param.requires_grad = True
-
             # microsoft-aurora 1.3.0 requires timm==0.6.13, but you have timm 0.9.2 (segmentation-models-pytorch 0.3.3 requires) which is incompatible.
         elif model_name == "microsoft/climax":
             from .model_components.climax.climax import ClimaX_CNN
@@ -81,6 +115,7 @@ class BaselineNet(nn.Module):
 
             model = ClimaX_CNN(
                 default_vars=[str(i) for i in range(input_dim)],
+                # default_vars=["t2m", "lsm", "slt", "z"],
                 img_size=[img_size // 4, img_size // 4],
                 output_dim=output_dim,
                 decoder_norm="batch",

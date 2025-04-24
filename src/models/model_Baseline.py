@@ -10,12 +10,13 @@ from transformers import (
     UperNetConfig,
     UperNetForSemanticSegmentation,
 )
-
+# from config.settings import settings
 
 # transformers editable installation: https://huggingface.co/docs/transformers/installation#installing-from-source
 class BaselineNet(nn.Module):
     def __init__(
         self,
+        disaster,
         model_name,
         input_dim=4,
         output_dim=1,
@@ -29,6 +30,7 @@ class BaselineNet(nn.Module):
         # model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0", num_labels=output_dim)
 
         # backbone = timm.create_model(model_name, pretrained=True, features_only=True)
+        self.disaster = disaster
         self.model_name = model_name
         if model_name == "openmmlab/upernet-convnext-tiny":
             original_model = UperNetForSemanticSegmentation.from_pretrained(model_name)
@@ -154,12 +156,12 @@ class BaselineNet(nn.Module):
                 logger.info("Freeze the encoders")
                 for _, param in model.encoder1.named_parameters():
                     param.requires_grad = False
-                for _, param in model.encoder2.named_parameters():
-                    param.requires_grad = False
-                for _, param in model.encoder3.named_parameters():
-                    param.requires_grad = False
-                for _, param in model.encoder4.named_parameters():
-                    param.requires_grad = False
+                # for _, param in model.encoder2.named_parameters():
+                #     param.requires_grad = False
+                # for _, param in model.encoder3.named_parameters():
+                #     param.requires_grad = False
+                # for _, param in model.encoder4.named_parameters():
+                #     param.requires_grad = False
 
         else:
             raise ValueError(f"Can't find matched model {model_name}.")
@@ -167,7 +169,6 @@ class BaselineNet(nn.Module):
         self.model = model
 
     def _initialize_weights(self, std=0.02):
-        # for m in self.decoder:
         for m in self.model.modules():
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
                 nn.init.trunc_normal_(m.weight, std=std, a=-2 * std, b=2 * std)

@@ -145,10 +145,10 @@ class ViTGroupedChannelsEncoder(nn.Module):
         # apply Transformer blocks
 
         for blk in self.blocks:
-            if self.training:
-                x = checkpoint.checkpoint(blk, x)
-            else:
-                x = blk(x)
+            # if self.training:
+            #     x = checkpoint.checkpoint(blk, x)
+            # else:
+            x = blk(x)
         x = self.norm(x)
 
         # # remove cls token

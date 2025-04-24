@@ -55,10 +55,12 @@ class Prithvi(nn.Module):
         # CNN Decoder Blocks:
         self.depths = decoder_depths
         self.dims = decoder_dims
+        self.tubelet_size = tubelet_size
         self.output_dim = output_dim
+        self.num_frames = num_frames
 
         self.decoder_head = CoreDecoder(
-            embedding_dim=embed_dim,
+            embedding_dim=embed_dim*num_frames,
             output_dim=output_dim,
             depths=decoder_depths,
             dims=decoder_dims,
@@ -73,20 +75,23 @@ class Prithvi(nn.Module):
         # Separate channel axis
         N, L, D = x.shape
         x = x.permute(0, 2, 1)
-        x = x.view(N, D, int(L**0.5), int(L**0.5))
+        """
+        If use non-temporal version, switch here!
+        """
+        # x = x.view(N, D, int(L**0.5), int(L**0.5))
+        x = x.reshape(N, D*self.num_frames, int((L/self.num_frames)**0.5), int((L/self.num_frames)**0.5))
 
         return x
 
     def forward(self, x):
         if x.dim() == 4:  # if input has no T dim, expand it
             x = x[:, :, None, :, :]
-        x = self.vit_encoder(
-            x
-        )  # 1, 1025, 768 (b, sequence length (flattened_patches)+cls, embed_dim )
+        x = self.vit_encoder(x)  # 1, 1025, 768 (b, sequence length (flattened_patches)+cls, embed_dim )
+        # print("x",x.shape) # 1,589, 768 (temp)
         # remove cls token
         x = x[:, 1:, :]  # 1, 1024, 768
         # reshape into 2d features
-        x = self.reshape(x)  # 1, 768, 32, 32
+        x = self.reshape(x)  # 1, 768, 32, 32 # 1, 768*3, 14, 14 (3*14*14 is 588)
         x = self.decoder_downsample_block(x)  # [1, 768, 32, 32]
         x = self.decoder_head(x)  # [1, 2, 512, 512]
         return x

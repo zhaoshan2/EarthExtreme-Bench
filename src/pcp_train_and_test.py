@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-
+import torch.nn.functional as F
 from .models.model_components.aurora.aurora import Batch, Metadata
 from .utils import logging_utils, score_utils
 
@@ -29,50 +29,38 @@ class SEQTrain:
         local_metas = input["meta_info"]
         batch_size = input["x"].shape[1]
         # desired: (b, l, h, w) now(l1, b, c, w, h)
+        img_size = settings[self.disaster]["dataloader"]["img_size"]
 
+        pcp_scaled = input["x"].transpose(0, 1).squeeze(2)
+        mask_scaled = input["mask"][0]
+        if pcp_scaled.shape[-1] != img_size:
+            pcp_scaled = F.interpolate(
+                                pcp_scaled,
+                                size=(img_size, img_size),
+                                mode='nearest',)
+            mask_scaled = F.interpolate(
+                                mask_scaled,
+                                size=(img_size, img_size),
+                                mode='nearest',)
         batch = Batch(
-            surf_vars={"pcp": input["x"].transpose(0, 1).squeeze(2)},
-            static_vars={"n": input["mask"][0, 0, 0]},
-            atmos_vars={"p": input["x"].transpose(0, 1)},
+            surf_vars={"pcp": pcp_scaled},
+            static_vars={"n": mask_scaled[0,0]},
+            atmos_vars={"p": pcp_scaled.unsqueeze(2)},
             metadata=Metadata(
-                lat=torch.Tensor(
-                    [
-                        round(x * 200) / 200
-                        for x in np.linspace(
-                            local_metas["latitude"][0],
-                            local_metas["latitude"][0]
-                            - settings[self.disaster]["spatial_res"]
-                            * (input["x"].shape[-2]),
-                            input["x"].shape[-2],
-                        )
-                    ]
+                lat=torch.linspace(
+                    local_metas["latitude"][0],
+                    local_metas["latitude"][0]
+                    - settings[self.disaster]["spatial_res"] * (pcp_scaled.shape[-2]),
+                    pcp_scaled.shape[-2],
+                    dtype=torch.float32,
                 ),
-                lon=torch.Tensor(
-                    [
-                        round(x * 200) / 200
-                        for x in np.linspace(
-                            local_metas["longitude"][0],
-                            local_metas["longitude"][0]
-                            + settings[self.disaster]["spatial_res"]
-                            * (input["x"].shape[-1]),
-                            input["x"].shape[-1],
-                        )
-                    ]
+                lon=torch.linspace(
+                    local_metas["longitude"][0],
+                    local_metas["longitude"][0]
+                    + settings[self.disaster]["spatial_res"] * (pcp_scaled.shape[-1]),
+                    pcp_scaled.shape[-1],
+                    dtype=torch.float32,
                 ),
-                # lat=torch.linspace(
-                #     local_metas["latitude"][0],
-                #     local_metas["latitude"][0]
-                #     - settings[self.disaster]["spatial_res"] * (input["x"].shape[-2]),
-                #     input["x"].shape[-2],
-                #     dtype=torch.float32,
-                # ),
-                # lon=torch.linspace(
-                #     local_metas["longitude"][0],
-                #     local_metas["longitude"][0]
-                #     + settings[self.disaster]["spatial_res"] * (input["x"].shape[-1]),
-                #     input["x"].shape[-1],
-                #     dtype=torch.float32,
-                # ),
                 time=tuple(local_metas["input_time"][i] for i in range(batch_size)),
                 atmos_levels=(0,),
                 # To do, infer the rollout steps from the input and target time
@@ -102,12 +90,12 @@ class SEQTrain:
 
         # Loss function
         criterion = self.loss_mapping[loss]
-        best_loss = 0.394  # np.inf
+        best_loss = np.inf  #
         total_loss = 0.0
-        iter_id = 23300  # 0
+        iter_id = 0  # 0
         best_state, last_state = None, None
-        best_epoch = 20000
-        val_interval = 10000
+        best_epoch = 0
+        val_interval = 1000
         train_loader = data.train_dataloader()
 
         while iter_id < num_epochs:
@@ -133,6 +121,12 @@ class SEQTrain:
                 logits = (
                     output.surf_vars["pcp"].clone().requires_grad_(True)
                 )  # (b,t,h,w)
+                if logits.size()[-2:] != y_train.size()[-2:]:
+                    logits = F.interpolate(
+                        logits,
+                        size=y_train.size()[-2:],
+                        mode="nearest",
+                    )
                 # logits = torch.clamp(logits, min=0)
                 loss = criterion(logits, y_train)
                 # Call the backward algorithm and calculate the gratitude of parameters
@@ -158,11 +152,13 @@ class SEQTrain:
                     total_loss = 0.0
                     val_loader = data.val_dataloader()
                     loss_val = 0.0
+                    val_id = 0
                     while True:
                         try:
                             val_data = next(val_loader)
                             batch = self.prepare_batch(val_data)
                             batch = batch.to(device)
+                            val_id += 1
                         except StopIteration:
                             break
                         with torch.no_grad():
@@ -173,32 +169,19 @@ class SEQTrain:
                             y_val = val_data["y"].to(device)
                             y_val = torch.transpose(y_val, 0, 1).squeeze(2)
                             logits = torch.clamp(logits, min=0)
+                            if logits.size()[-2:] != y_val.size()[-2:]:
+                                logits = F.interpolate(
+                                    logits,
+                                    size=y_val.size()[-2:],
+                                    mode="nearest",
+                                )
                             loss = criterion(logits, y_val)
                             loss_val += loss.item()
 
-                    loss_val /= len(val_loader)
+                    loss_val /= val_id
                     # plot the last frame
                     logger.info("val loss {} : {:.3f}".format(iter_id, loss_val))
                     wandb.log({"val loss": loss_val})
-                    vis_input = batch.surf_vars["pcp"].detach().cpu().numpy()
-                    vis_gt = y_val.detach().cpu().numpy()
-                    vis_pred = logits.detach().cpu().numpy()
-                    fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                    s, l = np.amin(vis_gt[0, 0]), np.amax(vis_gt[0, 0])
-                    im = axes[0].imshow(vis_input[0, -1], vmin=s, vmax=l)
-                    plt.colorbar(im, ax=axes[0])
-                    axes[0].set_title(f"input")
-
-                    im = axes[1].imshow(vis_gt[0, 0], vmin=s, vmax=l)
-                    plt.colorbar(im, ax=axes[1])
-                    axes[1].set_title(f"target")
-
-                    im = axes[2].imshow(vis_pred[0, 0], vmin=s, vmax=l)
-                    plt.colorbar(im, ax=axes[2])
-                    axes[2].set_title(f"pred")
-
-                    plt.savefig(f"train_sample_iter{iter_id}.png")
-                    plt.close(fig)
 
                     if loss_val < best_loss:
                         best_loss = loss_val
@@ -221,9 +204,9 @@ class SEQTrain:
                 }
                 file_path = os.path.join(ckp_path, "last_model.pth")
 
-                if iter_id % 100 == 0:
-                    with open(file_path, "wb") as f:
-                        torch.save(last_state, f)
+                # if iter_id % 100 == 0:
+                with open(file_path, "wb") as f:
+                    torch.save(last_state, f)
 
         logger.info(f"length of validation loader {len(val_loader)}")
 
@@ -261,6 +244,12 @@ class StormTrain(SEQTrain):
 
                 output = model(batch)
                 logits_test = output.surf_vars["pcp"]  # b,l, h, w
+                if logits_test.size()[-2:] != y_test.size()[-2:]:
+                    logits_test = F.interpolate(
+                        logits_test,
+                        size=y_test.size()[-2:],
+                        mode="bilinear",
+                    )# b,l, 480, 480
                 mask = test_data.get("mask")  # l, b, c, h, w
 
                 loss = criterion(logits_test, y_test)  #  b,  h, w
@@ -272,6 +261,7 @@ class StormTrain(SEQTrain):
                 prediction = torch.clamp(prediction, min=0)
                 # The evaluation takes all inputs should be between 0~1(pixel value) (pred, target, thresholds)
                 test_y_numpy = (test_data["y"]).numpy() / scan_max  # l, b, c, h, w
+
                 prediction_numpy = (
                     prediction.detach().cpu().numpy() / scan_max
                 )  # l, b,c, h, w
@@ -293,8 +283,13 @@ class StormTrain(SEQTrain):
                     # img = np.log(img + epsilon) - np.log(epsilon)
                     return img
 
-                if id % 1 == 0:
-                    x = batch.surf_vars["pcp"].detach().cpu().numpy() / scan_max
+                if id % 10 == 0:
+                    x = batch.surf_vars["pcp"]
+                    x = F.interpolate(
+                        x,
+                        size=(480, 480),
+                        mode='nearest', ).detach().cpu().numpy()
+
                     mask = mask[0, 0, 0].numpy()
                     # b,l,h,w
                     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
@@ -309,7 +304,7 @@ class StormTrain(SEQTrain):
                     input_time = input_time.strftime("%y-%m-%dT%H%M")
                     axes[0].set_title(f"input_{input_time}")
 
-                    im = axes[1].imshow(better_vis(test_y_numpy[0, 0, 0] * mask))  #
+                    im = axes[1].imshow(better_vis(test_y_numpy[0, 0, 0] * scan_max * mask))  #
                     #     vmin=s,
                     #     vmax=l,
                     # )
@@ -320,7 +315,7 @@ class StormTrain(SEQTrain):
                     )
                     axes[1].set_title(f"target_{target_time}")
 
-                    im = axes[2].imshow(better_vis(prediction_numpy[0, 0, 0] * mask))  #
+                    im = axes[2].imshow(better_vis(prediction_numpy[0, 0, 0] * scan_max * mask))  #
                     #     vmin=s,
                     #     vmax=l,
                     # )
@@ -333,6 +328,7 @@ class StormTrain(SEQTrain):
                     plt.savefig(f"{png_path}/test_pred_{input_time}.png")
                     plt.close(fig)
                 total_loss += loss
+            total_loss /= id
             csv_path = save_path / model_id / "csv"
             if not os.path.exists(csv_path):
                 os.makedirs(csv_path)
@@ -340,9 +336,10 @@ class StormTrain(SEQTrain):
                 evaluator.calculate_stat()
             )
 
-            logging_utils.save_errorScores(csv_path, maes, "maes")
-            logging_utils.save_errorScores(csv_path, mses, "mses")
+            logging_utils.save_errorScores(csv_path, maes, "nmaes")
+            logging_utils.save_errorScores(csv_path, mses, "nmses")
         return {
+            "loss": total_loss,
             "POD": test_pod,
             "FAR": test_far,
             "CSI": test_csi,
@@ -362,7 +359,11 @@ class ExpcpTrain(StormTrain):
         criterion = nn.L1Loss()
         total_loss = 0
         scan_max = settings[self.disaster]["normalization"]["max"]
-        thresholds = settings[self.disaster]["evaluation"]["thresholds"] / scan_max
+        thresholds = settings[self.disaster]["evaluation"]["thresholds"]
+        thresholds = [
+            thresholds[i] / scan_max for i in range(len(thresholds))
+        ]
+
         evaluator = score_utils.RadarEvaluation(seq_len=seq_len, thresholds=thresholds)
 
         # turn off gradient tracking for evaluation
@@ -406,12 +407,14 @@ class ExpcpTrain(StormTrain):
                     maes[datetime_seqs[k].strftime("%y-%m-%d %H:%M")] = mae[:, k]
                     mses[datetime_seqs[k].strftime("%y-%m-%d %H:%M")] = mse[:, k]
                 # visualize the first batch and the first horizon
-                if id % 1000 == 0:
+                if id % 10 == 0:
                     x = batch.surf_vars["pcp"].detach().cpu().numpy()  # b,l,h,w
                     fig, axes = plt.subplots(3, 1, figsize=(5, 15))
-                    s, l = np.amin(test_y_numpy[0, 0, 0]), np.amax(
-                        test_y_numpy[0, 0, 0]
-                    )
+                    # s, l = np.percentile(test_y_numpy[0, 0, 0], 1), np.percentile(
+                    #     test_y_numpy[0, 0, 0], 99.7
+                    # )
+                    s, l = np.amin(test_y_numpy[0, 0, 0]), np.amax(test_y_numpy[0, 0, 0])
+
                     im = axes[0].imshow(x[0, -1], vmin=s, vmax=l)
                     plt.colorbar(im, ax=axes[0])
                     input_time = datetime_seqs[0] + timedelta(
@@ -424,11 +427,11 @@ class ExpcpTrain(StormTrain):
                     plt.colorbar(im, ax=axes[1])
                     target_time = datetime_seqs[0] + timedelta(
                         minutes=settings[self.disaster]["temporal_res"]
-                        * settings[self.disaster]["dataloader"]["run_size"]
+                        * (settings[self.disaster]["dataloader"]["run_size"]-1)
                     )
                     axes[1].set_title(f"target_{target_time}")
-
-                    im = axes[2].imshow(prediction_numpy[0, 0, 0], vmin=s, vmax=l)
+                    im = axes[2].imshow(prediction_numpy[0, 0, 0]*mask[0,0,0].detach().cpu().numpy(), vmin=s, vmax=l)
+                    # im = axes[2].imshow(prediction_numpy[0, 0, 0], vmin=0.28)
                     plt.colorbar(im, ax=axes[2])
                     axes[2].set_title(f"pred_{target_time}")
 
@@ -438,6 +441,7 @@ class ExpcpTrain(StormTrain):
                     plt.savefig(f"{png_path}/test_pred_{input_time}.png")
                     plt.close(fig)
                 total_loss += loss
+            total_loss /= id
             csv_path = save_path / model_id / "csv"
             if not os.path.exists(csv_path):
                 os.makedirs(csv_path)
@@ -448,6 +452,7 @@ class ExpcpTrain(StormTrain):
             logging_utils.save_errorScores(csv_path, maes, "maes")
             logging_utils.save_errorScores(csv_path, mses, "mses")
         return {
+            "loss": total_loss,
             "POD": test_pod,
             "FAR": test_far,
             "CSI": test_csi,

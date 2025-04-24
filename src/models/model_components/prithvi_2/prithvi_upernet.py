@@ -1,12 +1,13 @@
 import sys
 import warnings
 from functools import partial
+from typing import Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from encoder import PrithviViT
+from .encoder import PrithviViT
 from mmseg.models.necks import Feature2Pyramid
 from mmseg.models.decode_heads import UPerHead, FCNHead
 
@@ -41,14 +42,14 @@ def resize(
 class UperNet(torch.nn.Module):
     def __init__(self, backbone, neck, decode_head, aux_head):
         super(UperNet, self).__init__()
-        self.backbone = backbone
+        self.encoder = backbone
         self.neck = neck
         self.decode_head = decode_head
         self.aux_head = aux_head
 
-    def forward(self, x):
-        feat = self.backbone.forward_features(x)
-        feat = self.backbone.prepare_features_for_image_model(feat)
+    def forward(self, x, temporal_coords, location_coords):
+        feat = self.encoder.forward_features(x, temporal_coords, location_coords)
+        feat = self.encoder.prepare_features_for_image_model(feat)
         # for i, f in enumerate(feat):
         #     print(i, f.shape) #0, (2,1024, 14, 14) 1, #(2,1024, 14, 14)...
         feat = self.neck(feat)
@@ -93,12 +94,12 @@ class Prithvi(nn.Module):
 
         # --------------------------------------------------------------------------
         # encoder specifics
-        self.vit_encoder = vit_base_patch16(img_size, patch_size, in_chans, num_frames, embed_dim)
+        self.encoder = vit_base_patch16(img_size, patch_size, in_chans, num_frames, embed_dim)
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         # --------------------------------------------------------------------------
         self.output_dim = output_dim
-        edim = self.vit_encoder.embed_dim
+        edim = self.encoder.embed_dim
 
         self.neck = Feature2Pyramid(
             embed_dim=edim,
@@ -134,14 +135,17 @@ class Prithvi(nn.Module):
         )
 
         self.seg_model = UperNet(
-            self.vit_encoder, self.neck, self.decoder, self.aux_head
+            self.encoder, self.neck, self.decoder, self.aux_head
         )
 
     def forward(self, x):
+        temporal_coords, location_coords = None, None
+        if isinstance(x, Tuple):
+            x, temporal_coords, location_coords= x[0], x[1], x[2]
         if x.dim() == 4:  # if input has no T dim, expand it
             x = x[:, :, None, :, :]
 
-        x = self.seg_model(x)
+        x = self.seg_model(x, temporal_coords, location_coords)
         return x
 
 

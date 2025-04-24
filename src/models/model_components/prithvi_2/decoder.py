@@ -5,9 +5,9 @@ import torch.nn as nn
 import torch
 from timm.models.vision_transformer import Block
 
-from training_utils import get_activation, get_normalization, SE_Block
-from encoder import TemporalEncoder, LocationEncoder
-from embed import get_3d_sincos_pos_embed
+from .training_utils import get_activation, get_normalization, SE_Block
+from .encoder import TemporalEncoder, LocationEncoder
+from .embed import get_3d_sincos_pos_embed
 
 def _init_weights(module):
     """Initialize the weights"""

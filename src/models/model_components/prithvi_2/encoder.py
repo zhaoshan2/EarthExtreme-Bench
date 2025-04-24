@@ -9,7 +9,7 @@ from timm.layers import to_2tuple
 from einops import rearrange
 import numpy as np
 
-from embed import PatchEmbed, get_3d_sincos_pos_embed, _get_1d_sincos_embed_from_grid_torch
+from .embed import PatchEmbed, get_3d_sincos_pos_embed, _get_1d_sincos_embed_from_grid_torch
 
 def _init_weights(module):
     """Initialize the weights"""
@@ -98,7 +98,7 @@ class PrithviViT(nn.Module):
                  coords_encoding: Union[List[str], None] = None,
                  coords_scale_learn: bool = False,
                  encoder_only: bool = True,  # needed for timm
-                 out_indices: List=[5, 11, 17, 23],
+                 out_indices: List = [5, 11, 17, 23],
                  ** kwargs,
                 ):
         super().__init__()
@@ -112,6 +112,7 @@ class PrithviViT(nn.Module):
         self.out_indices = out_indices
         if isinstance(patch_size, int):
             patch_size = (1, patch_size, patch_size)
+        self.patch_size = patch_size
 
         # 3D patch embedding
         self.patch_embed = PatchEmbed(

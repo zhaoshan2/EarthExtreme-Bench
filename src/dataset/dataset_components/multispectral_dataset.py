@@ -56,6 +56,7 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
 
     def _transform(self, x: Dict):
         image = x["image"]  # CHW
+        spatial_coord = x['spatial_coords']
         # label = x["label"]  # HW
         new_chips = np.zeros(
             (image.shape[0], self.chip_size, self.chip_size), dtype=np.float32
@@ -68,11 +69,11 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 interpolation=cv2.INTER_NEAREST,
             )
             new_chips[i, :, :] = new_slice
-        # new_label = cv2.resize(
-        #     label, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
-        # )
+        new_coor = cv2.resize(
+            spatial_coord, (self.chip_size, self.chip_size), interpolation=cv2.INTER_NEAREST
+        )
         x["image"] = new_chips
-        # x["label"] = new_label
+        x["spatial_coords"] = new_coor
         return x
 
     def __len__(self):
@@ -100,10 +101,15 @@ class BaseMultispectralDataset(torch.utils.data.Dataset):
                 blue = dataset.read(1)
                 # Stack the bands into a single array with shape (height, width, 3)
                 image = np.stack((red, green, blue), axis=-1)
+            try:
+                spatial_coords = dataset.lnglat()
+            except:
+                # Cannot read coords
+                spatial_coords = None
 
         label = np.array(Image.open(label_path))  # (512,512)
 
-        sample = dict(image=image, label=label, meta_info=filename)
+        sample = dict(image=image, label=label, spatial_coords=spatial_coords, meta_info=filename)
         if self.chip_size != 512:
             sample = self._transform(sample)
 
@@ -139,6 +145,7 @@ class MultispectralDataset(BaseMultispectralDataset):
 
         # resize images
         image = sample["image"]
+        spatial_coords = sample["spatial_coords"]
 
         label = np.array(Image.fromarray(sample["label"]))
         mask = label == -1
@@ -151,6 +158,7 @@ class MultispectralDataset(BaseMultispectralDataset):
         # y shape 1HW
         sample["y"] = torch.tensor(np.expand_dims(label, 0), dtype=torch.float32).long()
         # To do: if the noise mask not impact the final performance, then remove it.
+        sample["spatial_coords"] = torch.tensor(spatial_coords, dtype=torch.float32)
         sample["noise_mask"] = torch.tensor(np.expand_dims(~mask, 0))
         return sample
 
